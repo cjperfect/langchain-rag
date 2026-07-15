@@ -2,4 +2,8 @@ packages:
   - "packages/*"
   - "apps/*"
 allowBuilds:
+  esbuild: true
+  protobufjs: true
   sharp: true
+minimumReleaseAgeExclude:
+  - '@langchain/core@1.2.3'

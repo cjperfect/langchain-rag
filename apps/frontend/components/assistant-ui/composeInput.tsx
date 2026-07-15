@@ -1,41 +1,14 @@
-import {
-  ComposerPrimitive,
-  unstable_defaultDirectiveFormatter,
-  Unstable_SlashCommand,
-} from "@assistant-ui/react";
-import {
-  unstable_useMentionAdapter,
-  unstable_useSlashCommandAdapter,
-} from "@assistant-ui/react";
+import { ComposerPrimitive } from "@assistant-ui/react";
+import { unstable_useMentionAdapter, unstable_useSlashCommandAdapter } from "@assistant-ui/react";
 import { ComposerTriggerPopover } from "@/components/assistant-ui/composer-trigger-popover";
-import { useRouter } from "next/navigation"; // 根据你的路由库调整
-import {
-  FileTextIcon,
-  GlobeIcon,
-  LanguagesIcon,
-  SlashIcon,
-  WrenchIcon,
-} from "lucide-react";
+import { FileTextIcon, GlobeIcon, LanguagesIcon, SlashIcon, WrenchIcon } from "lucide-react";
 
 export function ComposerInput() {
-  // 1. 定义配置（放在组件顶层）
-  const router = useRouter();
-
   // @ 提及配置
   const mention = unstable_useMentionAdapter({
     items: [
-      {
-        id: "1",
-        type: "1",
-        label: "陈江",
-        metadata: { email: "123456@qq.com" },
-      },
-      {
-        id: "2",
-        type: "2",
-        label: "测试人员",
-        metadata: { email: "test@qq.com" },
-      },
+      { id: "1", type: "1", label: "陈江", metadata: { email: "123456@qq.com" } },
+      { id: "2", type: "2", label: "测试人员", metadata: { email: "test@qq.com" } },
     ],
   });
 

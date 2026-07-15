@@ -1,0 +1,11 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "configs": ["recommended"],
+  "rules": {
+    "correctness": {
+      "noUnusedVariables": "error",
+      "noDebugger": "error"
+    }
+  },
+  "ignorePatterns": ["dist/", "node_modules/", "build/", ".next/"]
+}
