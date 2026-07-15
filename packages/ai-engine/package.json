@@ -1,0 +1,27 @@
+{
+  "name": "@langchain-rag/ai-engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LangChain RAG engine for document retrieval and QA",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "scripts": {
+    "dev": "nodemon dist/index.js",
+    "build": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@langchain/community": "^1.1.29",
+    "@langchain/core": "^1.2.3",
+    "@langchain/openai": "^1.5.5",
+    "dotenv": "^17.4.2",
+    "langchain": "^1.5.3",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.1",
+    "tsup": "^8.5.1"
+  }
+}
