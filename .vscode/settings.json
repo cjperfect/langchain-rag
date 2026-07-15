@@ -1,0 +1,6 @@
+{
+  "editor.fontSize": 16,
+  "terminal.integrated.fontSize": 14,
+  "terminal.integrated.fontFamily": "MesloLGS NF",
+  "workbench.iconTheme": "vscode-icons"
+}
