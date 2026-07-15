@@ -28,7 +28,6 @@ export async function runAgentStreamEvents(input: string) {
 
         if (typeof content === "string") {
           fullText += content;
-          // 实时输出
         }
       }
 
