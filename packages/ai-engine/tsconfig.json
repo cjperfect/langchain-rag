@@ -4,12 +4,14 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "noEmit": true,
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "types": ["node"]
+    "types": ["node"],
+    "outDir": "./dist",
+    "declaration": true,
+    "ignoreDeprecations": "6.0"
   },
   "include": ["src/**/*"]
 }

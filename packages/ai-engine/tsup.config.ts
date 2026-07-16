@@ -7,4 +7,6 @@ export default defineConfig({
   sourcemap: false, // 方便生产环境调试
   clean: true, // 每次构建前清理 dist 目录
   target: "node20", // 目标 Node.js 版本（建议 Node 20+）
+  dts: true, // 生成类型声明文件
+  outDir: "./dist",
 });

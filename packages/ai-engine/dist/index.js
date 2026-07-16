@@ -1,6 +1,23 @@
 // src/index.ts
 import "dotenv/config";
 
+// src/agent/index.ts
+import { HumanMessage } from "@langchain/core/messages";
+import { createAgent } from "langchain";
+
+// src/agent/model.ts
+import { ChatOpenAI } from "@langchain/openai";
+var model = new ChatOpenAI({
+  model: "deepseek-v4-flash",
+  apiKey: process.env.DEEPSEEK_API_KEY,
+  temperature: 0.7,
+  maxTokens: 1024,
+  timeout: 6e4,
+  configuration: {
+    baseURL: "https://api.deepseek.com"
+  }
+});
+
 // src/prompts/system.ts
 var systemPrompt = `\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u4F01\u4E1A\u5185\u90E8\u667A\u80FD\u52A9\u624B\uFF0C\u670D\u52A1\u4E8E\u516C\u53F8\u7684\u8FD0\u8425\u3001\u4EA7\u54C1\u548C\u6570\u636E\u56E2\u961F\u3002
 ## \u4F60\u7684\u6838\u5FC3\u80FD\u529B
@@ -196,74 +213,83 @@ var activitySqlTool = tool(
   }
 );
 
-// src/agent/model.ts
-import { ChatOpenAI } from "@langchain/openai";
-var model = new ChatOpenAI({
-  model: "deepseek-v4-flash",
-  apiKey: process.env.DEEPSEEK_API_KEY,
-  temperature: 0.7,
-  maxTokens: 1024,
-  timeout: 6e4,
-  configuration: {
-    baseURL: "https://api.deepseek.com"
-  }
-});
-
 // src/agent/index.ts
-import { createAgent } from "langchain";
-var tools = [activitySqlTool];
-var messages = [];
-var agent = createAgent({
-  model,
-  tools,
-  systemPrompt
-});
-async function runAgentStreamEvents(input) {
-  let fullText = "";
-  messages.push({ role: "user", content: input });
-  try {
-    const stream = await agent.streamEvents({ messages }, { version: "v2" });
-    for await (const event of stream) {
-      if (event.event === "on_chat_model_stream") {
-        const content = event.data.chunk.content;
-        if (typeof content === "string") {
-          fullText += content;
-        }
-      }
-      if (event.event === "on_tool_start") {
-        console.log("\u8C03\u7528\u5DE5\u5177:", event.name);
-      }
-      if (event.event === "on_tool_end") {
-        console.log("\u5DE5\u5177\u5B8C\u6210:", event.name);
-      }
-    }
-    return fullText;
-  } catch (err) {
-    console.error(err);
+var AiEngine = class _AiEngine {
+  /**
+   * Agent 全局单例
+   */
+  static agent = createAgent({
+    model,
+    tools: [activitySqlTool],
+    systemPrompt
+  });
+  /**
+   * 普通对话
+   */
+  async chat(input, options = {}) {
+    const messages = [...options.history ?? [], new HumanMessage(input)];
+    const res = await _AiEngine.agent.invoke({
+      messages
+    });
+    const last = res.messages.at(-1);
+    return typeof last?.content === "string" ? last.content : JSON.stringify(last?.content);
   }
-}
-async function runAgentStream(input) {
-  let fullText = "";
-  messages.push({ role: "user", content: input });
-  try {
-    const stream = await agent.stream({ messages }, { streamMode: "messages" });
+  /**
+   * LangChain Stream
+   */
+  async *stream(input, options = {}) {
+    const messages = [...options.history ?? [], new HumanMessage(input)];
+    const stream = await _AiEngine.agent.stream(
+      { messages },
+      {
+        streamMode: "messages"
+      }
+    );
     for await (const [chunk] of stream) {
-      fullText += chunk.content;
+      if (typeof chunk.content === "string") {
+        yield chunk.content;
+      }
     }
-    return fullText;
-  } catch (err) {
-    console.log(err);
   }
-}
-async function runAgent(input) {
-  messages.push({ role: "user", content: input });
-  const res = await agent.invoke({ messages });
-  const lastMessage = res.messages[res.messages.length - 1];
-  messages.push(lastMessage);
-  return lastMessage.content;
-}
+  /**
+   * Stream Events
+   */
+  async *streamEvents(input, options = {}) {
+    const messages = [...options.history ?? [], new HumanMessage(input)];
+    const stream = await _AiEngine.agent.streamEvents(
+      { messages },
+      {
+        version: "v2"
+      }
+    );
+    for await (const event of stream) {
+      switch (event.event) {
+        case "on_chat_model_stream": {
+          const content = event.data.chunk.content;
+          if (typeof content === "string") {
+            yield {
+              type: "token",
+              content
+            };
+          }
+          break;
+        }
+        case "on_tool_start":
+          yield {
+            type: "tool_start",
+            name: event.name
+          };
+          break;
+        case "on_tool_end":
+          yield {
+            type: "tool_end",
+            name: event.name
+          };
+          break;
+      }
+    }
+  }
+};
 export {
-  runAgent,
-  runAgentStream,
-  runAgentStreamEvents
+  AiEngine
 };

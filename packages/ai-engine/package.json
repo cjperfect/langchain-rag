@@ -4,14 +4,12 @@
   "private": true,
   "description": "LangChain RAG engine for document retrieval and QA",
   "type": "module",
-  "main": "./dist/index.js",
+  "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
     "dev": "nodemon dist/index.js",
-    "build": "tsup --watch",
-    "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "build": "tsup --watch"
   },
   "dependencies": {
     "@langchain/community": "^1.1.29",
