@@ -9,6 +9,7 @@
   "type": "module",
   "scripts": {
     "dev:frontend": "pnpm --filter @langchain-rag/frontend dev",
+    "dev:backend": "pnpm --filter @langchain-rag/backend start:dev",
     "build:ai-engine": "pnpm --filter @langchain-rag/ai-engine build",
     "dev:ai-engine": "pnpm --filter @langchain-rag/ai-engine dev",
     "typecheck": "pnpm -r exec tsc --noEmit",
