@@ -88,6 +88,7 @@ npx prisma migrate dev
 
 ```bash
 # 在项目根目录执行，监听文件变化自动重新构建
+pnpm build
 pnpm dev:ai-engine
 ```
 
@@ -95,7 +96,7 @@ pnpm dev:ai-engine
 
 ```bash
 # 在项目根目录执行，端口 3001，文件变化自动重启
-pnpm --filter @langchain-rag/backend start:dev
+pnpm dev:backend
 ```
 
 ### 7. 启动前端
@@ -126,28 +127,3 @@ pnpm dev:frontend
 启动后访问：
 - 前端：http://localhost:3000
 - 后端 API：http://localhost:3001
-
-## 常用命令
-
-| 命令 | 说明 |
-|---|---|
-| `pnpm dev:frontend` | 启动前端开发服务器 |
-| `pnpm dev:ai-engine` | 构建 AI 引擎并监听文件变化 |
-| `pnpm build:ai-engine` | 构建 AI 引擎（单次） |
-| `pnpm --filter @langchain-rag/backend start:dev` | 启动后端开发服务器 |
-| `pnpm typecheck` | 全量 TypeScript 类型检查 |
-| `pnpm lint` | 全量代码检查（oxlint） |
-| `pnpm format` | 全量格式化检查（oxfmt） |
-| `npx prisma migrate dev` | 生成并应用数据库迁移（在 apps/backend 中执行） |
-| `npx prisma generate` | 生成 Prisma Client（在 apps/backend 中执行） |
-
-## 数据库
-
-PostgreSQL 通过 Docker Compose 运行，配置如下：
-
-- 端口：`5432`
-- 用户名：`root`
-- 密码：`chenjiang`
-- 数据库名：`langchain_rag`
-
-数据持久化在 Docker volume `pgdata` 中。
