@@ -8,8 +8,7 @@
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "dev": "nodemon dist/index.js",
-    "build": "tsup --watch"
+    "dev": "tsup --watch"
   },
   "dependencies": {
     "@langchain/community": "^1.1.29",

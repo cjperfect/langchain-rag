@@ -88,7 +88,6 @@ npx prisma migrate dev
 
 ```bash
 # 在项目根目录执行，监听文件变化自动重新构建
-pnpm build
 pnpm dev:ai-engine
 ```
 
