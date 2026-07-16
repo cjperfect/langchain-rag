@@ -1,9 +1,19 @@
 # 项目背景
 
-- 技术栈：Next.js 14 + TypeScript + Tailwind CSS
-- UI 组件库：Shadcn-ui
-- 状态管理：Zustand
-- 包管理器：pnpm
+企业内部知识库问答系统，用于回答企业内部员工的问题。
+
+# 技术栈
+
+- apps/backend 技术栈：Nest.js + TypeScript + Prisma + PostgreSQL
+- apps/frontend 技术栈：Next.js 14 + TypeScript + Tailwind CSS + Shadcn-ui + assistant-ui
+- packages/ai-engine 技术栈：Langchain + TypeScript + Deepseek + pgvector
+
+# 项目结构
+
+- apps/backend 主要是定义API路由和数据库的操作
+- apps/frontend 主要是定义前端的组件和路由
+- packages/ai-engine 主要是定义AI引擎的逻辑
+- packages/shared 主要是定义共享的类型
 
 # 代码规范
 

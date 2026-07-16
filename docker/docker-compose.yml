@@ -1,17 +1,17 @@
 services:
   postgres:
-    image: pgvector/pgvector:pg17
+    image: postgres:17
     container_name: langchain-rag-postgres
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: chenjiang
       POSTGRES_DB: langchain_rag
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U root"]
       interval: 5s
       timeout: 5s
       retries: 5

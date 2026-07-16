@@ -16,6 +16,7 @@
     "baseUrl": "./",
     "rootDir": "./src",
     "incremental": true,
+    "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
     "skipLibCheck": true,
     "strictNullChecks": true,
     "forceConsistentCasingInFileNames": true,
@@ -24,5 +25,7 @@
     "noFallthroughCasesInSwitch": false,
     "ignoreDeprecations": "6.0",
     "types": ["node", "jest"]
-  }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
 }
