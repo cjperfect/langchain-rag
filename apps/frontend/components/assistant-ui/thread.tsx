@@ -61,6 +61,7 @@ import {
 } from "react";
 import { DirectiveText } from "@/components/assistant-ui/directive-text";
 import { ComposerInput } from "./composeInput";
+import { ModelSelector } from "./model-selector";
 
 export type ThreadGroupPart = MessagePrimitive.GroupedParts.GroupPart;
 
@@ -222,6 +223,7 @@ const Composer: FC = () => {
           className="border-border/60 data-[dragging=true]:border-ring focus-within:border-border dark:border-muted-foreground/15 dark:focus-within:border-muted-foreground/30 flex w-full flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) shadow-[0_4px_16px_-8px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] transition-[border-color,box-shadow] focus-within:shadow-[0_6px_24px_-8px_rgba(0,0,0,0.12),0_1px_2px_rgba(0,0,0,0.05)] data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))] dark:shadow-none"
         >
           <ComposerAttachments />
+
           <ComposerInput />
 
           <ComposerAction />
@@ -235,6 +237,19 @@ const ComposerAction: FC = () => {
   return (
     <div className="aui-composer-action-wrapper relative flex items-center">
       <ComposerAddAttachment />
+      <ModelSelector
+        className="ml-2"
+        models={[
+          {
+            id: "deepseek-v4-flash",
+            name: "DeepSeek-v4-flash",
+            description: "Fast",
+          },
+          { id: "deepseek-v4-pro", name: "DeepSeek-v4-pro", description: "Thinking" },
+        ]}
+        defaultValue="deepseek-v4-flash"
+        size="sm"
+      />
       <div className="flex items-center gap-1.5 ml-auto">
         <AuiIf condition={(s) => s.thread.capabilities.dictation}>
           <AuiIf condition={(s) => s.composer.dictation == null}>

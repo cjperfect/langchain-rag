@@ -5,7 +5,7 @@ import { getConversationId } from "./remote-thread-list-adapter";
 let lastResponseMessageId: number | null = null;
 
 export const chatAdapter: ChatModelAdapter = {
-  async *run({ messages, unstable_threadId }) {
+  async *run({ messages, unstable_threadId, context }) {
     const lastMessage = messages[messages.length - 1];
     const userContent = lastMessage?.content ?? [];
     const userMessage = userContent
@@ -34,6 +34,9 @@ export const chatAdapter: ChatModelAdapter = {
     if (parentMessageId) {
       body.parent_message_id = parentMessageId;
     }
+    if (context.config?.modelName) {
+      body.model = context.config.modelName;
+    }
 
     const response = await fetch("/api/chat", {
       method: "POST",
@@ -54,6 +57,18 @@ export const chatAdapter: ChatModelAdapter = {
 
     let buffer = "";
     let fullText = "";
+    let fullReasoning = "";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const toolParts: Record<string, any>[] = [];
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const buildContent = (text: string, reasoning: string, tools: Record<string, any>[]): any[] => {
+      const parts: any[] = [];
+      if (reasoning) parts.push({ type: "reasoning", text: reasoning } as any);
+      if (text) parts.push({ type: "text", text } as any);
+      parts.push(...tools);
+      return parts;
+    };
 
     while (true) {
       const { done, value } = await reader.read();
@@ -78,43 +93,68 @@ export const chatAdapter: ChatModelAdapter = {
 
         if (!dataStr) continue;
 
-        let data: {
-          session_id?: number;
-          content?: string;
-          error?: string;
-          request_message_id?: number;
-          response_message_id?: number;
-        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let sseData: Record<string, any>;
         try {
-          data = JSON.parse(dataStr);
+          sseData = JSON.parse(dataStr);
         } catch {
           continue;
         }
 
         switch (eventType) {
           case "error":
-            throw new Error(data.error ?? "未知错误");
+            throw new Error(sseData.error ?? "未知错误");
+
+          case "reasoning":
+            if (sseData.content) {
+              fullReasoning += sseData.content;
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              yield { content: buildContent(fullText, fullReasoning, toolParts) } as any;
+            }
+            break;
+
+          case "tool_start":
+            toolParts.push({
+              type: "tool-call",
+              toolCallId: `tool_${toolParts.length}`,
+              toolName: sseData.toolName ?? "unknown",
+              args: {},
+              argsText: "",
+            } as any);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            yield { content: buildContent(fullText, fullReasoning, toolParts) } as any;
+            break;
+
+          case "tool_end": {
+            const lastTool = toolParts[toolParts.length - 1];
+            if (lastTool) lastTool.result = sseData.result;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            yield { content: buildContent(fullText, fullReasoning, toolParts) } as any;
+            break;
+          }
 
           case "message":
-            if (data.content) {
-              fullText += data.content;
-              yield { content: [{ type: "text", text: fullText }] };
+            if (sseData.content) {
+              fullText += sseData.content;
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              yield { content: buildContent(fullText, fullReasoning, toolParts) } as any;
             }
             break;
 
           case "done":
-            if (data.response_message_id) {
-              lastResponseMessageId = data.response_message_id;
+            if (sseData.response_message_id) {
+              lastResponseMessageId = sseData.response_message_id;
             }
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             yield {
-              content: [{ type: "text", text: fullText }],
+              content: buildContent(fullText, fullReasoning, toolParts),
               metadata: {
                 custom: {
-                  request_message_id: data.request_message_id,
-                  response_message_id: data.response_message_id,
+                  request_message_id: sseData.request_message_id,
+                  response_message_id: sseData.response_message_id,
                 },
               },
-            };
+            } as any;
             break;
         }
       }

@@ -37,7 +37,6 @@ interface RemoteThreadListResponse {
 interface ConversationItem {
   id: number;
   title: string | null;
-  model: string;
   status: number; // 1=正常 2=归档
   messageCount: number;
   totalTokens: number;
@@ -136,7 +135,6 @@ const toMetadata = (c: ConversationItem): RemoteThreadMetadata => ({
   status: c.status === 2 ? "archived" : "regular",
   lastMessageAt: c.lastMessageAt ? new Date(c.lastMessageAt) : undefined,
   custom: {
-    model: c.model,
     messageCount: c.messageCount,
     totalTokens: c.totalTokens,
     branchCount: c.branchCount,

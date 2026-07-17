@@ -139,7 +139,7 @@ function ToolFallbackTrigger({
     status?.type === "incomplete" && status.reason === "cancelled";
 
   const Icon = statusIconMap[statusType];
-  const label = isCancelled ? "已取消工具" : "使用工具";
+  const label = isCancelled ? "Cancelled tool" : "Used tool";
 
   return (
     <CollapsibleTrigger
@@ -266,7 +266,7 @@ function ToolFallbackResult({
       {...props}
     >
       <p className="aui-tool-fallback-result-header text-muted-foreground text-xs font-medium">
-        结果：
+        Result:
       </p>
       <pre className="aui-tool-fallback-result-content bg-muted/50 text-foreground/90 mt-1 rounded-md p-2.5 text-xs whitespace-pre-wrap">
         {typeof result === "string" ? result : JSON.stringify(result, null, 2)}
@@ -294,7 +294,7 @@ function ToolFallbackError({
   if (!errorText) return null;
 
   const isCancelled = status.reason === "cancelled";
-  const headerText = isCancelled ? "取消原因：" : "错误：";
+  const headerText = isCancelled ? "Cancelled reason:" : "Error:";
 
   return (
     <div
@@ -312,14 +312,14 @@ function ToolFallbackError({
   );
 }
 
-const APPROVED_RESULT = "用户已批准";
-const DENIED_RESULT = "用户已拒绝工具执行";
+const APPROVED_RESULT = "Approved by user";
+const DENIED_RESULT = "User denied tool execution";
 
 const APPROVAL_OPTION_DEFAULT_LABELS: Record<string, string> = {
-  "allow-once": "允许",
-  "allow-always": "始终允许",
-  "reject-once": "拒绝",
-  "reject-always": "始终拒绝",
+  "allow-once": "Allow",
+  "allow-always": "Always allow",
+  "reject-once": "Deny",
+  "reject-always": "Always deny",
 };
 
 const isAllowKind = (kind: string) =>
@@ -441,7 +441,7 @@ function ToolFallbackApproval({
             onClick={() => respondWithOption(confirming)}
             disabled={submitted}
           >
-            确认
+            Confirm
           </Button>
           <Button
             size="sm"
@@ -450,7 +450,7 @@ function ToolFallbackApproval({
             onClick={() => setConfirmingId(null)}
             disabled={submitted}
           >
-            返回
+            Back
           </Button>
         </div>
       </div>
@@ -489,7 +489,7 @@ function ToolFallbackApproval({
             onClick={() => respond(false)}
             disabled={submitted}
           >
-            拒绝
+            Deny
           </Button>
         )}
       </div>
@@ -511,7 +511,7 @@ function ToolFallbackApproval({
         onClick={() => respond(true)}
         disabled={submitted}
       >
-        允许
+        Allow
       </Button>
       <Button
         size="sm"
@@ -520,7 +520,7 @@ function ToolFallbackApproval({
         onClick={() => respond(false)}
         disabled={submitted}
       >
-        拒绝
+        Deny
       </Button>
     </div>
   );

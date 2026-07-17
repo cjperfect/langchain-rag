@@ -4,6 +4,7 @@ import {
   AssistantRuntimeProvider,
   useLocalRuntime,
   useRemoteThreadListRuntime,
+  WebSpeechDictationAdapter,
 } from "@assistant-ui/react";
 import { Thread } from "@/components/assistant-ui/thread";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -13,10 +14,16 @@ import { DevToolsModal } from "@assistant-ui/react-devtools";
 import { chatAdapter } from "@/adapters/chat-adapter";
 import { remoteThreadListAdapter } from "@/adapters/remote-thread-list-adapter";
 
+// 避免每次 render 重建
+const speechAdapter = new WebSpeechDictationAdapter();
+
 export const Assistant = () => {
   const runtime = useRemoteThreadListRuntime({
     adapter: remoteThreadListAdapter,
-    runtimeHook: () => useLocalRuntime(chatAdapter),
+    runtimeHook: () =>
+      useLocalRuntime(chatAdapter, {
+        adapters: { dictation: speechAdapter },
+      }),
   });
 
   return (
