@@ -15,6 +15,7 @@ import { CheckIcon, CopyIcon } from "lucide-react";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { cn } from "@/lib/utils";
 import { SyntaxHighlighter } from "./shiki-highlighter";
+import { DiffViewer } from "./diff-viewer";
 
 const MarkdownTextImpl = () => {
   return (
@@ -23,6 +24,11 @@ const MarkdownTextImpl = () => {
       className="aui-md"
       components={defaultComponents}
       defer
+      componentsByLanguage={{
+        diff: {
+          SyntaxHighlighter: ({ code }) => <DiffViewer patch={code} />,
+        },
+      }}
     />
   );
 };
