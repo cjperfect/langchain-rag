@@ -5,12 +5,16 @@ interface ContextMessage {
 }
 interface ChatOptions {
     history?: ContextMessage[];
+    /** 模型覆盖（不传则用默认 DeepSeek-v4-flash） */
+    model?: string;
 }
 declare class AiEngine {
     /**
      * Agent 全局单例
      */
     private static readonly agent;
+    /** 获取 agent（需要切换模型时创建新实例） */
+    private getAgent;
     /**
      * 普通对话
      */
@@ -26,11 +30,15 @@ declare class AiEngine {
         type: "token";
         content: string;
     } | {
+        type: "reasoning";
+        content: string;
+    } | {
         type: "tool_start";
         name?: string;
     } | {
         type: "tool_end";
         name?: string;
+        result?: unknown;
     }>;
 }
 

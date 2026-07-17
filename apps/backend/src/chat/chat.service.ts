@@ -28,6 +28,8 @@ export class ChatService {
     }
     const conv = await this.conversationService.get(Number(conversationId));
 
+    yield { event: "session", data: { session_id: conversationId } };
+
     // 2. 确定父消息 ID（前端传了 parent_message_id 则用它，否则用 currentMessageId）
     const parentMessageId = chatDto.parent_message_id
       ? Number(chatDto.parent_message_id)
@@ -42,25 +44,43 @@ export class ChatService {
       rootId: chatDto.parent_message_id,
     });
 
-    // 4. 调用 AI 引擎，流式输出
+    // 4. 调用 AI 引擎，流式输出（模型每消息可选切换）
     const startTime = Date.now();
     let fullContent = "";
+    let fullReasoning = "";
     let inputTokens = 0;
     let outputTokens = 0;
 
     try {
-      const stream = await this.aiEngine.stream(chatDto.prompt, {
+      const stream = this.aiEngine.streamEvents(chatDto.prompt, {
         history: ctx.messages as ContextMessage[],
+        model: chatDto.model,
       });
 
-      for await (const chunk of stream) {
-        fullContent += chunk;
-        if (!chunk) continue;
-        yield { event: "message", data: { content: chunk } };
+      for await (const event of stream) {
+        switch (event.type) {
+          case "reasoning":
+            fullReasoning += event.content;
+            yield { event: "reasoning", data: { content: event.content } };
+            break;
+          case "tool_start":
+            yield { event: "tool_start", data: { toolName: event.name } };
+            break;
+          case "tool_end":
+            yield {
+              event: "tool_end",
+              data: { toolName: event.name, result: event.result },
+            };
+            break;
+          case "token":
+            fullContent += event.content;
+            yield { event: "message", data: { content: event.content } };
+            break;
+        }
       }
 
       inputTokens = Math.ceil(chatDto.prompt.length / 4);
-      outputTokens = Math.ceil(fullContent.length / 4);
+      outputTokens = Math.ceil((fullContent + fullReasoning).length / 4);
     } catch (error) {
       yield { event: "error", data: { error: String(error) } };
       return;
@@ -87,7 +107,7 @@ export class ChatService {
       summaryId: ctx.summaryId ? Number(ctx.summaryId) : undefined,
       contextMessageIds: ctx.messageIds.map(Number),
       rawMessages: ctx.messages,
-      model: ctx.model ?? DEFAULT_MODEL,
+      model: chatDto.model ?? DEFAULT_MODEL,
       systemPrompt: conv.systemPrompt,
       inputTokens,
       outputTokens,

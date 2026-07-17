@@ -21,7 +21,6 @@ export class ConversationService {
       data: {
         userId,
         title: dto.title,
-        model: dto.model ?? "deepseek-chat",
         systemPrompt: dto.systemPrompt,
       },
     });
@@ -35,7 +34,6 @@ export class ConversationService {
       select: {
         id: true,
         title: true,
-        model: true,
         status: true,
         messageCount: true,
         totalTokens: true,
@@ -62,7 +60,6 @@ export class ConversationService {
       where: { id: conversationId },
       data: {
         ...(dto.title !== undefined && { title: dto.title }),
-        ...(dto.model !== undefined && { model: dto.model }),
         ...(dto.systemPrompt !== undefined && { systemPrompt: dto.systemPrompt }),
         ...(dto.status !== undefined && { status: dto.status }),
       },

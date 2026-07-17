@@ -4,6 +4,7 @@ import "dotenv/config";
 // src/agent/index.ts
 import { HumanMessage, AIMessage, SystemMessage } from "@langchain/core/messages";
 import { createAgent } from "langchain";
+import { ChatOpenAI as ChatOpenAI2 } from "@langchain/openai";
 
 // src/agent/model.ts
 import { ChatOpenAI } from "@langchain/openai";
@@ -226,6 +227,17 @@ function toLangChainMessages(messages) {
     }
   });
 }
+function createModel(modelName) {
+  if (!modelName || modelName === model.model) return model;
+  return new ChatOpenAI2({
+    model: modelName,
+    apiKey: process.env.DEEPSEEK_API_KEY,
+    temperature: 0.7,
+    maxTokens: 1024,
+    timeout: 6e4,
+    configuration: { baseURL: "https://api.deepseek.com" }
+  });
+}
 var AiEngine = class _AiEngine {
   /**
    * Agent 全局单例
@@ -235,14 +247,21 @@ var AiEngine = class _AiEngine {
     tools: [activitySqlTool],
     systemPrompt
   });
+  /** 获取 agent（需要切换模型时创建新实例） */
+  getAgent(modelName) {
+    if (!modelName || modelName === model.model) return _AiEngine.agent;
+    return createAgent({
+      model: createModel(modelName),
+      tools: [activitySqlTool],
+      systemPrompt
+    });
+  }
   /**
    * 普通对话
    */
   async chat(input, options = {}) {
     const messages = [...toLangChainMessages(options.history ?? []), new HumanMessage(input)];
-    const res = await _AiEngine.agent.invoke({
-      messages
-    });
+    const res = await this.getAgent(options.model).invoke({ messages });
     const last = res.messages.at(-1);
     return typeof last?.content === "string" ? last.content : JSON.stringify(last?.content);
   }
@@ -251,11 +270,9 @@ var AiEngine = class _AiEngine {
    */
   async *stream(input, options = {}) {
     const messages = [...toLangChainMessages(options.history ?? []), new HumanMessage(input)];
-    const stream = await _AiEngine.agent.stream(
+    const stream = await this.getAgent(options.model).stream(
       { messages },
-      {
-        streamMode: "messages"
-      }
+      { streamMode: "messages" }
     );
     for await (const [chunk] of stream) {
       if (typeof chunk.content === "string") {
@@ -268,34 +285,31 @@ var AiEngine = class _AiEngine {
    */
   async *streamEvents(input, options = {}) {
     const messages = [...toLangChainMessages(options.history ?? []), new HumanMessage(input)];
-    const stream = await _AiEngine.agent.streamEvents(
+    const stream = await this.getAgent(options.model).streamEvents(
       { messages },
-      {
-        version: "v2"
-      }
+      { version: "v2" }
     );
     for await (const event of stream) {
       switch (event.event) {
         case "on_chat_model_stream": {
-          const content = event.data.chunk.content;
-          if (typeof content === "string") {
-            yield {
-              type: "token",
-              content
-            };
+          const chunk = event.data.chunk;
+          const reasoning = chunk.additional_kwargs?.reasoning_content;
+          if (typeof reasoning === "string" && reasoning) {
+            yield { type: "reasoning", content: reasoning };
+          }
+          if (typeof chunk.content === "string" && chunk.content) {
+            yield { type: "token", content: chunk.content };
           }
           break;
         }
         case "on_tool_start":
-          yield {
-            type: "tool_start",
-            name: event.name
-          };
+          yield { type: "tool_start", name: event.name };
           break;
         case "on_tool_end":
           yield {
             type: "tool_end",
-            name: event.name
+            name: event.name,
+            result: event.data.output
           };
           break;
       }

@@ -34,7 +34,6 @@ model ChatConversation {
   userId Int @map("user_id")
 
   title       String?  @db.VarChar(255)
-  model       String?  @db.VarChar(100)
   systemPrompt String? @map("system_prompt") @db.Text
 
   currentMessageId BigInt? @map("current_message_id")
@@ -77,6 +76,7 @@ model ChatMessage {
   role        String  @db.VarChar(20)
   content     String? @db.Text
   reasoningContent String? @map("reasoning_content") @db.Text
+  model       String? @db.VarChar(100)
 
   messageType String @default("text") @map("message_type") @db.VarChar(50)
 

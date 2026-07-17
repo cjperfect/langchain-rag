@@ -227,7 +227,6 @@ export class MessageService {
 
     return {
       conversationId,
-      model: conv.model,
       messages,
       messageIds: messagesSince.map((m) => m.id),
       summaryId: summary?.id,

@@ -1,12 +1,10 @@
 export class CreateConversationDto {
   title?: string;
-  model?: string;
   systemPrompt?: string;
 }
 
 export class UpdateConversationDto {
   title?: string;
-  model?: string;
   systemPrompt?: string;
   /** 1=正常 2=归档 3=删除 */
   status?: number;
