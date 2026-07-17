@@ -186,48 +186,25 @@ export const remoteThreadListAdapter: RemoteThreadListAdapter = {
     remoteId: string,
     _unstable_messages,
   ): Promise<import("assistant-stream").AssistantStream> {
-    // 提取消息文本
-    const messagesForBackend = _unstable_messages.map((m) => {
-      const text = m.content
+    const messagesForBackend = _unstable_messages.map((m) => ({
+      role: m.role,
+      content: m.content
         .filter((p): p is { type: "text"; text: string } => p.type === "text")
         .map((p) => p.text)
-        .join(" ");
-      return { role: m.role, content: text };
-    });
+        .join(" "),
+    }));
 
-    // 调后端 AI 生成标题
     try {
-      const { title } = await post<{ title: string }>(
-        `/conversations/${remoteId}/generate-title`,
-        { messages: messagesForBackend },
-      );
+      const { title } = await post<{ title: string }>(`/conversations/${remoteId}/generate-title`, {
+        messages: messagesForBackend,
+      });
       if (title) {
         return createAssistantStream((controller) => {
           controller.appendText(title);
         });
       }
     } catch {
-      /* 调后端失败则走 fallback */
-    }
-
-    // fallback：从最后一条用户消息提取前 50 字
-    try {
-      const userMessages = _unstable_messages.filter((m) => m.role === "user");
-      if (userMessages.length > 0) {
-        const lastUser = userMessages[userMessages.length - 1];
-        const text = lastUser.content
-          .filter((p): p is { type: "text"; text: string } => p.type === "text")
-          .map((p) => p.text)
-          .join(" ")
-          .slice(0, 50);
-        if (text) {
-          return createAssistantStream((controller) => {
-            controller.appendText(text);
-          });
-        }
-      }
-    } catch {
-      /* 忽略 */
+      /* 后端已处理所有 fallback，这里忽略 */
     }
 
     return createAssistantStream((_controller) => {});
