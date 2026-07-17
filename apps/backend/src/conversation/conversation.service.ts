@@ -3,10 +3,16 @@ import { PrismaService } from "../prisma/prisma.service";
 import { Exceptions } from "../common/exceptions/business.exception";
 import { ErrorCode } from "@langchain-rag/shared";
 import { AiEngine } from "@langchain-rag/ai-engine";
-import type { CreateConversationDto, UpdateConversationDto, GenerateTitleDto } from "./dto/conversation.dto";
+import type {
+  CreateConversationDto,
+  UpdateConversationDto,
+  GenerateTitleDto,
+} from "./dto/conversation.dto";
 
 @Injectable()
 export class ConversationService {
+  private readonly aiEngine = new AiEngine();
+
   constructor(private readonly prisma: PrismaService) {}
 
   /** 创建新会话 */
@@ -99,9 +105,8 @@ export class ConversationService {
       return { title: conv.title ?? "新会话" };
     }
 
-    const ai = new AiEngine();
     try {
-      const title = await ai.chat(
+      const title = await this.aiEngine.chat(
         `Generate a concise title (max 20 characters, prefer Chinese) for a conversation that starts with: "${firstUserMsg.content}". Output ONLY the title, no quotes, no explanation.`,
       );
 

@@ -28,15 +28,18 @@ export class ChatService {
     }
     const conv = await this.conversationService.get(Number(conversationId));
 
-    // 2. 构建上下文（在当前消息保存前，取历史消息）
-    const ctx = await this.messageService.buildContext(
-      conversationId,
-      Number(conv.currentMessageId),
-    );
+    // 2. 确定父消息 ID（前端传了 parent_message_id 则用它，否则用 currentMessageId）
+    const parentMessageId = chatDto.parent_message_id
+      ? Number(chatDto.parent_message_id)
+      : Number(conv.currentMessageId);
 
-    // 3. 保存用户消息
+    // 3. 构建上下文（取父消息之前的历史）
+    const ctx = await this.messageService.buildContext(conversationId, parentMessageId);
+
+    // 4. 保存用户消息
     const userMsg = await this.messageService.createUserMessage(userId, conversationId, {
       content: chatDto.prompt,
+      rootId: chatDto.parent_message_id,
     });
 
     // 4. 调用 AI 引擎，流式输出
