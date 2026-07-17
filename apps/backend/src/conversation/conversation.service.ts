@@ -43,7 +43,7 @@ export class ConversationService {
   /** 获取单个会话 */
   async get(conversationId: number) {
     const conv = await this.prisma.chatConversation.findUnique({
-      where: { id: conversationId },
+      where: { id: Number(conversationId) },
     });
     if (!conv) throw Exceptions.notFound(ErrorCode.CONVERSATION_NOT_FOUND, "会话不存在");
     return conv;

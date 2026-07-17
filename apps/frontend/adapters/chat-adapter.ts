@@ -1,5 +1,5 @@
 import { ChatModelAdapter } from "@assistant-ui/react";
-import { getConversationId, registerThreadConversation } from "./remote-thread-list-adapter";
+import { getConversationId } from "./remote-thread-list-adapter";
 
 export const chatAdapter: ChatModelAdapter = {
   async *run({ messages, unstable_threadId }) {
@@ -10,8 +10,8 @@ export const chatAdapter: ChatModelAdapter = {
       .map((part) => part.text)
       .join("\n\n");
 
-    // 查找当前线程对应的后端会话 ID
-    const conversationId = unstable_threadId ? getConversationId(unstable_threadId) : null;
+    // remoteId 即后端会话 ID（initialize 已创建）
+    const conversationId = getConversationId(unstable_threadId);
 
     const body: Record<string, unknown> = { prompt: userMessage };
     if (conversationId) {
@@ -48,7 +48,7 @@ export const chatAdapter: ChatModelAdapter = {
       buffer = blocks.pop() || "";
 
       for (const block of blocks) {
-        let eventType = "message"; // SSE 规范：缺省事件类型为 message
+        let eventType = "message";
         let dataStr = "";
 
         for (const line of block.split("\n")) {
@@ -75,13 +75,6 @@ export const chatAdapter: ChatModelAdapter = {
         }
 
         switch (eventType) {
-          case "session":
-            // 后端返回的会话 ID：注册到当前线程的映射中（用于后续的多轮对话）
-            if (data.session_id && unstable_threadId) {
-              registerThreadConversation(unstable_threadId, data.session_id);
-            }
-            break;
-
           case "error":
             throw new Error(data.error ?? "未知错误");
 

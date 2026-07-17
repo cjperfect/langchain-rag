@@ -109,29 +109,22 @@ const HistoryProvider: FC<PropsWithChildren> = ({ children }) => {
 };
 
 // ---------------------------------------------------------------------------
-// 共享的 threadId → conversationId 映射表
-// 供 chat-adapter 在发送消息时查找当前线程对应的后端会话 ID
+// threadId → conversationId 映射
+// initialize 是唯一创建入口，remoteId 始终是后端数字 ID
+//
+// 注意：initialize 后 React 尚未 re-render，useLocalRuntime 里的
+// useAuiState(remoteId) 可能仍是旧值。用 lastCreatedId 兜底。
 // ---------------------------------------------------------------------------
-const threadToConversation = new Map<string, number>();
+let lastCreatedId: number | null = null;
 
-/** 注册线程 ID 与会话 ID 的映射（新线程 initialize 时调用） */
-export function registerThreadConversation(threadId: string, conversationId: number): void {
-  threadToConversation.set(threadId, conversationId);
-}
-
-/** 根据线程 ID 查找对应的会话 ID，找不到返回 null */
-export function getConversationId(threadId: string): number | null {
-  // 1) 直接命中
-  if (threadToConversation.has(threadId)) return threadToConversation.get(threadId)!;
-
-  // 2) threadId 本身可能就是一个数字字符串（remoteId = conversationId）
-  const parsed = parseInt(threadId, 10);
-  if (!isNaN(parsed)) {
-    threadToConversation.set(threadId, parsed);
-    return parsed;
+/** 根据 remoteId 解析会话 ID */
+export function getConversationId(remoteId: string | undefined): number | null {
+  if (remoteId) {
+    const parsed = parseInt(remoteId, 10);
+    if (!isNaN(parsed)) return parsed;
   }
-
-  return null;
+  // fallback：initialize 刚创建但 React 还没 re-render
+  return lastCreatedId;
 }
 
 // ---------------------------------------------------------------------------
@@ -160,28 +153,22 @@ export const remoteThreadListAdapter: RemoteThreadListAdapter = {
   /** 获取会话列表 */
   async list(): Promise<RemoteThreadListResponse> {
     const data = await get<ConversationItem[]>("/conversations");
-    const threads = data.map(toMetadata);
-    // 为已有会话注册映射（remoteId 就是 conversation ID）
-    for (const c of data) {
-      threadToConversation.set(String(c.id), c.id);
-    }
-    return { threads };
-    // TODO: 后端支持游标分页后可返回 nextCursor
+    return { threads: data.map(toMetadata) };
   },
 
-  /** 新建会话 — 不调后端，会话由 /api/chat 在首条消息时自动创建 */
+  /** 新建会话 → POST /api/conversations */
   async initialize(
-    threadId: string,
+    _threadId: string,
   ): Promise<{ remoteId: string; externalId: string | undefined }> {
-    // 先用 threadId 占位，chat-adapter 收到 SSE session 事件后注册真实映射
-    return { remoteId: threadId, externalId: undefined };
+    const conv = await post<ConversationItem>("/conversations", { title: "新会话" });
+    lastCreatedId = conv.id;
+    return { remoteId: String(conv.id), externalId: undefined };
   },
 
   /** 获取单个会话元数据 */
   async fetch(threadId: string): Promise<RemoteThreadMetadata> {
     const id = parseInt(threadId, 10);
     const conv = await get<ConversationItem>(`/conversations/${id}`);
-    threadToConversation.set(threadId, conv.id);
     return toMetadata(conv);
   },
 
@@ -193,15 +180,13 @@ export const remoteThreadListAdapter: RemoteThreadListAdapter = {
   /** 删除 */
   async delete(remoteId: string): Promise<void> {
     await del(`/conversations/${remoteId}`);
-    // 清理本地映射
-    threadToConversation.delete(remoteId);
   },
 
   async generateTitle(
     remoteId: string,
     _unstable_messages,
   ): Promise<import("assistant-stream").AssistantStream> {
-    // 提取消息文本（转为后端需要的 { role, content } 格式）
+    // 提取消息文本
     const messagesForBackend = _unstable_messages.map((m) => {
       const text = m.content
         .filter((p): p is { type: "text"; text: string } => p.type === "text")
@@ -210,23 +195,19 @@ export const remoteThreadListAdapter: RemoteThreadListAdapter = {
       return { role: m.role, content: text };
     });
 
-    // 新线程的 remoteId 是 localUUID，需要先查真实会话 ID
-    const realId = getConversationId(remoteId) ?? remoteId;
-
-    // 有真实会话 ID 时调后端 AI 生成标题
-    if (typeof realId === "number" || realId !== remoteId) {
-      try {
-        const { title } = await post<{ title: string }>(`/conversations/${realId}/generate-title`, {
-          messages: messagesForBackend,
+    // 调后端 AI 生成标题
+    try {
+      const { title } = await post<{ title: string }>(
+        `/conversations/${remoteId}/generate-title`,
+        { messages: messagesForBackend },
+      );
+      if (title) {
+        return createAssistantStream((controller) => {
+          controller.appendText(title);
         });
-        if (title) {
-          return createAssistantStream((controller) => {
-            controller.appendText(title);
-          });
-        }
-      } catch {
-        /* 调后端失败则走 fallback */
       }
+    } catch {
+      /* 调后端失败则走 fallback */
     }
 
     // fallback：从最后一条用户消息提取前 50 字
@@ -249,7 +230,6 @@ export const remoteThreadListAdapter: RemoteThreadListAdapter = {
       /* 忽略 */
     }
 
-    // 最终 fallback
     return createAssistantStream((_controller) => {});
   },
 

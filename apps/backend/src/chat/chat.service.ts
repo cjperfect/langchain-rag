@@ -21,21 +21,12 @@ export class ChatService {
 
   /** AI 流式聊天 */
   async *streamChat(userId: number, chatDto: ChatDto): AsyncGenerator<ChatStreamEvent> {
-    // 1. 获取或创建会话
-    let conversationId: number;
-    if (chatDto.chat_session_id) {
-      conversationId = chatDto.chat_session_id;
-    } else {
-      const conv = await this.conversationService.create(userId, {
-        model: DEFAULT_MODEL,
-      });
-      conversationId = Number(conv.id);
+    // 1. 获取会话（前端 initialize 已创建）
+    const conversationId = chatDto.chat_session_id;
+    if (conversationId == null) {
+      throw new Error("缺少 chat_session_id，前端可能未初始化会话");
     }
-
-    const conv = await this.conversationService.get(conversationId);
-
-    // 首条事件：会话 ID，前端下次请求带 chat_session_id 实现多轮对话
-    yield { event: "session", data: { session_id: conversationId } };
+    const conv = await this.conversationService.get(Number(conversationId));
 
     // 2. 构建上下文（在当前消息保存前，取历史消息）
     const ctx = await this.messageService.buildContext(
