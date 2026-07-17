@@ -1,0 +1,74 @@
+/**
+ * 统一错误码枚举
+ *
+ * 编码规则：
+ *   0        — 成功
+ *   4xx      — HTTP 状态码（400-499 客户端错误）
+ *   5xx      — HTTP 状态码（500-599 服务端错误）
+ *   10xxx    — 认证/授权
+ *   20xxx    — 会话
+ *   30xxx    — 消息
+ *   40xxx    — 附件/文件
+ *   50xxx    — Tool / Agent
+ *   60xxx    — RAG / 知识库
+ */
+export declare enum ErrorCode {
+    /** 成功 */
+    SUCCESS = 0,
+    /** 请求参数错误 */
+    BAD_REQUEST = 400,
+    /** 未登录 / token 无效 */
+    UNAUTHORIZED = 401,
+    /** 无权限 */
+    FORBIDDEN = 403,
+    /** 资源不存在 */
+    NOT_FOUND = 404,
+    /** 资源冲突（如重复注册） */
+    CONFLICT = 409,
+    /** 请求过于频繁 */
+    TOO_MANY_REQUESTS = 429,
+    /** 服务器内部错误 */
+    INTERNAL_ERROR = 500,
+    /** 邮箱已注册 */
+    EMAIL_ALREADY_EXISTS = 10001,
+    /** 邮箱或密码错误 */
+    INVALID_CREDENTIALS = 10002,
+    /** Token 已过期 */
+    TOKEN_EXPIRED = 10003,
+    /** 用户不存在 */
+    USER_NOT_FOUND = 10004,
+    /** 密码强度不足 */
+    WEAK_PASSWORD = 10005,
+    /** 会话不存在 */
+    CONVERSATION_NOT_FOUND = 20001,
+    /** 无权访问该会话 */
+    CONVERSATION_ACCESS_DENIED = 20002,
+    /** 会话已被归档 */
+    CONVERSATION_ARCHIVED = 20003,
+    /** 消息不存在 */
+    MESSAGE_NOT_FOUND = 30001,
+    /** 消息不属于该会话 */
+    MESSAGE_NOT_IN_CONVERSATION = 30002,
+    /** 消息生成失败 */
+    MESSAGE_GENERATION_FAILED = 30003,
+    /** 不支持的消息类型 */
+    UNSUPPORTED_MESSAGE_TYPE = 30004,
+    /** 文件不存在 */
+    FILE_NOT_FOUND = 40001,
+    /** 文件大小超限 */
+    FILE_TOO_LARGE = 40002,
+    /** 不支持的文件类型 */
+    UNSUPPORTED_FILE_TYPE = 40003,
+    /** Tool 执行失败 */
+    TOOL_EXECUTION_FAILED = 50001,
+    /** Tool 执行超时 */
+    TOOL_EXECUTION_TIMEOUT = 50002,
+    /** Agent 执行失败 */
+    AGENT_EXECUTION_FAILED = 50003,
+    /** 文档不存在 */
+    DOCUMENT_NOT_FOUND = 60001,
+    /** 文档解析失败 */
+    DOCUMENT_PARSE_FAILED = 60002,
+    /** 知识库检索失败 */
+    RAG_RETRIEVAL_FAILED = 60003
+}
