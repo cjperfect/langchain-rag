@@ -180,6 +180,9 @@ CREATE TABLE chat_message (
     -- 主键
     id                BIGSERIAL PRIMARY KEY,
 
+    -- 用户ID，关联用户表。冗余字段，避免查消息时 JOIN 会话表，同时支持 RLS 行级安全
+    user_id           BIGINT NOT NULL,
+
     -- 所属会话ID，关联 chat_conversation.id
     conversation_id   BIGINT NOT NULL,
 
@@ -217,6 +220,9 @@ CREATE TABLE chat_message (
 
 -- ========== 索引 ==========
 
+-- 按用户+时间查消息：用户维度消息查询，无需 JOIN 会话表
+CREATE INDEX idx_msg_user_time ON chat_message (user_id, created_at);
+
 -- 按会话+父节点查子节点：查某条消息的所有回复
 CREATE INDEX idx_msg_conv_parent ON chat_message (conversation_id, parent_id);
 
@@ -247,12 +253,12 @@ ORDER BY created_at;
 
 ### root_id 维护规则
 
-| 场景 | root_id 取值 |
-|------|-------------|
-| 会话首条消息 | NULL（自身为根） |
-| 正常回复（沿当前分支继续） | 继承父消息的 root_id |
+| 场景                        | root_id 取值                   |
+| --------------------------- | ------------------------------ |
+| 会话首条消息                | NULL（自身为根）               |
+| 正常回复（沿当前分支继续）  | 继承父消息的 root_id           |
 | 编辑消息 / 重新生成（分叉） | 新消息自身为根，root_id = NULL |
-| 用户主动 Fork | 新消息自身为根，root_id = NULL |
+| 用户主动 Fork               | 新消息自身为根，root_id = NULL |
 
 > 简记：分叉即新根。`root_id` 相同的消息属于同一条分支。
 
@@ -798,25 +804,25 @@ CREATE INDEX idx_rag_doc ON chat_rag_reference (document_id);
 
 ### 外键关系速查
 
-| 子表 | 外键列 | 引用表 | 引用列 |
-|---|---|---|---|
-| chat_message | `conversation_id` | chat_conversation | `id` |
-| chat_message | `parent_id` | chat_message | `id` |
-| chat_message | `root_id` | chat_message | `id` |
-| chat_summary | `conversation_id` | chat_conversation | `id` |
-| chat_summary | `branch_message_id` | chat_message | `id` |
-| chat_summary | `start_message_id` | chat_message | `id` |
-| chat_summary | `end_message_id` | chat_message | `id` |
-| chat_context | `conversation_id` | chat_conversation | `id` |
-| chat_context | `message_id` | chat_message | `id` |
-| chat_context | `summary_id` | chat_summary | `id` |
-| chat_attachment | `message_id` | chat_message | `id` |
-| chat_message_chunk | `message_id` | chat_message | `id` |
-| chat_tool_call | `message_id` | chat_message | `id` |
-| chat_agent_run | `conversation_id` | chat_conversation | `id` |
-| chat_agent_run | `message_id` | chat_message | `id` |
-| chat_agent_run | `parent_agent_run_id` | chat_agent_run | `id` |
-| chat_rag_reference | `message_id` | chat_message | `id` |
+| 子表               | 外键列                | 引用表            | 引用列 |
+| ------------------ | --------------------- | ----------------- | ------ |
+| chat_message       | `conversation_id`     | chat_conversation | `id`   |
+| chat_message       | `parent_id`           | chat_message      | `id`   |
+| chat_message       | `root_id`             | chat_message      | `id`   |
+| chat_summary       | `conversation_id`     | chat_conversation | `id`   |
+| chat_summary       | `branch_message_id`   | chat_message      | `id`   |
+| chat_summary       | `start_message_id`    | chat_message      | `id`   |
+| chat_summary       | `end_message_id`      | chat_message      | `id`   |
+| chat_context       | `conversation_id`     | chat_conversation | `id`   |
+| chat_context       | `message_id`          | chat_message      | `id`   |
+| chat_context       | `summary_id`          | chat_summary      | `id`   |
+| chat_attachment    | `message_id`          | chat_message      | `id`   |
+| chat_message_chunk | `message_id`          | chat_message      | `id`   |
+| chat_tool_call     | `message_id`          | chat_message      | `id`   |
+| chat_agent_run     | `conversation_id`     | chat_conversation | `id`   |
+| chat_agent_run     | `message_id`          | chat_message      | `id`   |
+| chat_agent_run     | `parent_agent_run_id` | chat_agent_run    | `id`   |
+| chat_rag_reference | `message_id`          | chat_message      | `id`   |
 
 ---
 
@@ -826,12 +832,12 @@ CREATE INDEX idx_rag_doc ON chat_rag_reference (document_id);
 
 `chat_message.message_type` 决定了去哪个附表查找详情：
 
-| message_type | 附表 | 说明 |
-|---|---|---|
-| `text` | — | 纯文本，content 即为完整内容 |
-| `image` | chat_attachment | 图片消息，附件表存图片URL |
-| `file` | chat_attachment | 文件消息，附件表存文件URL和元信息 |
-| `tool` | chat_tool_call | 工具调用，查 tool_call 表获取调用详情 |
+| message_type | 附表            | 说明                                  |
+| ------------ | --------------- | ------------------------------------- |
+| `text`       | —               | 纯文本，content 即为完整内容          |
+| `image`      | chat_attachment | 图片消息，附件表存图片URL             |
+| `file`       | chat_attachment | 文件消息，附件表存文件URL和元信息     |
+| `tool`       | chat_tool_call  | 工具调用，查 tool_call 表获取调用详情 |
 
 > 一条消息可以同时有附件和 tool_call（如 assistant 消息先调用 tool 再返回文本）。message_type 标记**主要内容形态**，不代表排他。
 
@@ -839,28 +845,28 @@ CREATE INDEX idx_rag_doc ON chat_rag_reference (document_id);
 
 ### chat_message.status
 
-| 值 | 含义 | 适用角色 |
-|----|------|---------|
-| `0` | 生成中 | 仅 `assistant` |
-| `1` | 完成 | 所有角色（`user`/`system` 消息默认 1）|
-| `2` | 失败 | `assistant` / `tool` |
+| 值  | 含义   | 适用角色                               |
+| --- | ------ | -------------------------------------- |
+| `0` | 生成中 | 仅 `assistant`                         |
+| `1` | 完成   | 所有角色（`user`/`system` 消息默认 1） |
+| `2` | 失败   | `assistant` / `tool`                   |
 
 ### chat_tool_call.status
 
-| 值 | 含义 |
-|----|------|
+| 值  | 含义   |
+| --- | ------ |
 | `0` | 执行中 |
-| `1` | 成功 |
-| `2` | 失败 |
-| `3` | 超时 |
+| `1` | 成功   |
+| `2` | 失败   |
+| `3` | 超时   |
 
 ### chat_agent_run.status
 
-| 值 | 含义 |
-|----|------|
+| 值  | 含义   |
+| --- | ------ |
 | `0` | 执行中 |
-| `1` | 成功 |
-| `2` | 失败 |
+| `1` | 成功   |
+| `2` | 失败   |
 
 ## 3. Token 计数策略
 
@@ -890,10 +896,10 @@ UPDATE 原消息
 
 ## 5. Context 记录模型视角
 
-| 概念 | 视角 |
-|------|------|
+| 概念         | 视角         |
+| ------------ | ------------ |
 | chat_message | 用户看到什么 |
-| chat_context | AI 看到什么 |
+| chat_context | AI 看到什么  |
 
 两者分离是调试和审计的核心基础。
 
@@ -928,57 +934,57 @@ summary 之后 ~ 当前输入之间的消息
 
 # 五、索引策略汇总
 
-| 表 | 索引 | 覆盖查询 |
-|---|---|---|
-| chat_conversation | `(user_id, last_message_at DESC)` | 会话列表 |
-| chat_conversation | `(status)` | 按状态过滤 |
-| chat_message | `(conversation_id, parent_id)` | 按会话+父节点查子节点 |
-| chat_message | `(conversation_id, root_id)` | **一键拉取整条分支**（核心优化） |
-| chat_message | `(conversation_id, created_at)` | 按时间排序 |
-| chat_summary | `(conversation_id, branch_message_id)` | 查某分支的最新摘要 |
-| chat_context | `(conversation_id, message_id)` | 查某条消息的上下文快照 |
-| chat_context | `(created_at)` | 按时间范围统计成本 |
-| chat_attachment | `(message_id)` | 查消息的附件 |
-| chat_message_chunk | `UNIQUE (message_id, chunk_index)` | 按序拉取/回放，防重 |
-| chat_tool_call | `(message_id)` | 查消息的 tool 调用 |
-| chat_tool_call | `(tool_call_id)` | tool 角色消息关联 |
-| chat_agent_run | `(conversation_id)` | 查会话的 Agent 记录 |
-| chat_agent_run | `(parent_agent_run_id)` | 追踪多Agent调用链 |
-| chat_agent_run | `(message_id)` | 查消息触发的Agent |
-| chat_rag_reference | `(message_id)` | 查回答引用了哪些文档 |
-| chat_rag_reference | `(document_id)` | 查文档被哪些回答引用 |
+| 表                 | 索引                                   | 覆盖查询                         |
+| ------------------ | -------------------------------------- | -------------------------------- |
+| chat_conversation  | `(user_id, last_message_at DESC)`      | 会话列表                         |
+| chat_conversation  | `(status)`                             | 按状态过滤                       |
+| chat_message       | `(conversation_id, parent_id)`         | 按会话+父节点查子节点            |
+| chat_message       | `(conversation_id, root_id)`           | **一键拉取整条分支**（核心优化） |
+| chat_message       | `(conversation_id, created_at)`        | 按时间排序                       |
+| chat_summary       | `(conversation_id, branch_message_id)` | 查某分支的最新摘要               |
+| chat_context       | `(conversation_id, message_id)`        | 查某条消息的上下文快照           |
+| chat_context       | `(created_at)`                         | 按时间范围统计成本               |
+| chat_attachment    | `(message_id)`                         | 查消息的附件                     |
+| chat_message_chunk | `UNIQUE (message_id, chunk_index)`     | 按序拉取/回放，防重              |
+| chat_tool_call     | `(message_id)`                         | 查消息的 tool 调用               |
+| chat_tool_call     | `(tool_call_id)`                       | tool 角色消息关联                |
+| chat_agent_run     | `(conversation_id)`                    | 查会话的 Agent 记录              |
+| chat_agent_run     | `(parent_agent_run_id)`                | 追踪多Agent调用链                |
+| chat_agent_run     | `(message_id)`                         | 查消息触发的Agent                |
+| chat_rag_reference | `(message_id)`                         | 查回答引用了哪些文档             |
+| chat_rag_reference | `(document_id)`                        | 查文档被哪些回答引用             |
 
 ---
 
 # 六、MySQL → PostgreSQL 迁移对照
 
-| MySQL | PostgreSQL | 说明 |
-|---|---|---|
-| `BIGINT AUTO_INCREMENT` | `BIGSERIAL` | 自增主键 |
-| `TINYINT` | `SMALLINT` | PG 无 TINYINT，用 SMALLINT（2字节） |
-| `INT` | `INTEGER` | 等价，仅命名差异 |
-| `LONGTEXT` | `TEXT` | PG 的 TEXT 即可存大文本，无需区分 |
-| `DATETIME` | `TIMESTAMP` | 时间类型 |
-| `JSON` | `JSONB` | PG 推荐 JSONB，支持索引且查询更快 |
-| `ON UPDATE CURRENT_TIMESTAMP` | 触发器 | PG 无此语法糖，需手动创建 `BEFORE UPDATE` 触发器 |
-| `COMMENT '...'` | `--` 行注释 | PG 不支持行内 COMMENT 语法，需用 `COMMENT ON COLUMN ... IS '...'` 或 SQL 注释 |
-| `ENGINE=InnoDB` | — | PG 无存储引擎概念 |
+| MySQL                         | PostgreSQL  | 说明                                                                          |
+| ----------------------------- | ----------- | ----------------------------------------------------------------------------- |
+| `BIGINT AUTO_INCREMENT`       | `BIGSERIAL` | 自增主键                                                                      |
+| `TINYINT`                     | `SMALLINT`  | PG 无 TINYINT，用 SMALLINT（2字节）                                           |
+| `INT`                         | `INTEGER`   | 等价，仅命名差异                                                              |
+| `LONGTEXT`                    | `TEXT`      | PG 的 TEXT 即可存大文本，无需区分                                             |
+| `DATETIME`                    | `TIMESTAMP` | 时间类型                                                                      |
+| `JSON`                        | `JSONB`     | PG 推荐 JSONB，支持索引且查询更快                                             |
+| `ON UPDATE CURRENT_TIMESTAMP` | 触发器      | PG 无此语法糖，需手动创建 `BEFORE UPDATE` 触发器                              |
+| `COMMENT '...'`               | `--` 行注释 | PG 不支持行内 COMMENT 语法，需用 `COMMENT ON COLUMN ... IS '...'` 或 SQL 注释 |
+| `ENGINE=InnoDB`               | —           | PG 无存储引擎概念                                                             |
 
 ---
 
 # 最终表清单
 
-| 表 | 作用 |
-|---|---|
-| chat_conversation | 会话列表 |
-| chat_message | 消息树（核心） |
-| chat_summary | 长上下文摘要 |
-| chat_context | 模型请求快照 |
-| chat_attachment | 文件附件 |
-| chat_message_chunk | 流式输出 |
-| chat_tool_call | 工具调用 |
-| chat_agent_run | Agent执行 |
-| chat_rag_reference | RAG引用 |
+| 表                 | 作用           |
+| ------------------ | -------------- |
+| chat_conversation  | 会话列表       |
+| chat_message       | 消息树（核心） |
+| chat_summary       | 长上下文摘要   |
+| chat_context       | 模型请求快照   |
+| chat_attachment    | 文件附件       |
+| chat_message_chunk | 流式输出       |
+| chat_tool_call     | 工具调用       |
+| chat_agent_run     | Agent执行      |
+| chat_rag_reference | RAG引用        |
 
 ---
 

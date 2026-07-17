@@ -1,12 +1,32 @@
-import { BaseMessage, HumanMessage } from "@langchain/core/messages";
+import { BaseMessage, HumanMessage, AIMessage, SystemMessage } from "@langchain/core/messages";
 import { createAgent } from "langchain";
 
 import { model } from "./model";
 import { systemPrompt } from "../prompts";
 import { activitySqlTool } from "../tools/activity-sql";
 
+/** 后端传入的上下文消息格式（与 LangChain 解耦） */
+export interface ContextMessage {
+  role: "user" | "assistant" | "system";
+  content: string;
+}
+
 export interface ChatOptions {
-  history?: BaseMessage[];
+  history?: ContextMessage[];
+}
+
+/** 将通用消息格式转为 LangChain BaseMessage */
+function toLangChainMessages(messages: ContextMessage[]): BaseMessage[] {
+  return messages.map((m) => {
+    switch (m.role) {
+      case "user":
+        return new HumanMessage(m.content);
+      case "assistant":
+        return new AIMessage(m.content);
+      case "system":
+        return new SystemMessage(m.content);
+    }
+  });
 }
 
 export class AiEngine {
@@ -23,7 +43,7 @@ export class AiEngine {
    * 普通对话
    */
   async chat(input: string, options: ChatOptions = {}): Promise<string> {
-    const messages = [...(options.history ?? []), new HumanMessage(input)];
+    const messages = [...toLangChainMessages(options.history ?? []), new HumanMessage(input)];
 
     const res = await AiEngine.agent.invoke({
       messages,
@@ -38,7 +58,7 @@ export class AiEngine {
    * LangChain Stream
    */
   async *stream(input: string, options: ChatOptions = {}): AsyncGenerator<string> {
-    const messages = [...(options.history ?? []), new HumanMessage(input)];
+    const messages = [...toLangChainMessages(options.history ?? []), new HumanMessage(input)];
 
     const stream = await AiEngine.agent.stream(
       { messages },
@@ -74,7 +94,7 @@ export class AiEngine {
         name?: string;
       }
   > {
-    const messages = [...(options.history ?? []), new HumanMessage(input)];
+    const messages = [...toLangChainMessages(options.history ?? []), new HumanMessage(input)];
 
     const stream = await AiEngine.agent.streamEvents(
       { messages },

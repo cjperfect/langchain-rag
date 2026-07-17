@@ -1,7 +1,10 @@
-import { BaseMessage } from '@langchain/core/messages';
-
+/** 后端传入的上下文消息格式（与 LangChain 解耦） */
+interface ContextMessage {
+    role: "user" | "assistant" | "system";
+    content: string;
+}
 interface ChatOptions {
-    history?: BaseMessage[];
+    history?: ContextMessage[];
 }
 declare class AiEngine {
     /**
@@ -31,4 +34,4 @@ declare class AiEngine {
     }>;
 }
 
-export { AiEngine, type ChatOptions };
+export { AiEngine, type ChatOptions, type ContextMessage };

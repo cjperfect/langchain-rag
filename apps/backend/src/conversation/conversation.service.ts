@@ -1,0 +1,118 @@
+import { Injectable } from "@nestjs/common";
+import { PrismaService } from "../prisma/prisma.service";
+import { Exceptions } from "../common/exceptions/business.exception";
+import { ErrorCode } from "@langchain-rag/shared";
+import { AiEngine } from "@langchain-rag/ai-engine";
+import type { CreateConversationDto, UpdateConversationDto, GenerateTitleDto } from "./dto/conversation.dto";
+
+@Injectable()
+export class ConversationService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  /** 创建新会话 */
+  async create(userId: number, dto: CreateConversationDto) {
+    return this.prisma.chatConversation.create({
+      data: {
+        userId,
+        title: dto.title,
+        model: dto.model ?? "deepseek-chat",
+        systemPrompt: dto.systemPrompt,
+      },
+    });
+  }
+
+  /** 获取用户会话列表 */
+  async list(userId: number) {
+    return this.prisma.chatConversation.findMany({
+      where: { userId, status: { in: [1, 2] } }, // 正常 + 归档
+      orderBy: { lastMessageAt: "desc" },
+      select: {
+        id: true,
+        title: true,
+        model: true,
+        status: true,
+        messageCount: true,
+        totalTokens: true,
+        branchCount: true,
+        lastMessageAt: true,
+        createdAt: true,
+      },
+    });
+  }
+
+  /** 获取单个会话 */
+  async get(conversationId: number) {
+    const conv = await this.prisma.chatConversation.findUnique({
+      where: { id: conversationId },
+    });
+    if (!conv) throw Exceptions.notFound(ErrorCode.CONVERSATION_NOT_FOUND, "会话不存在");
+    return conv;
+  }
+
+  /** 更新会话 */
+  async update(conversationId: number, dto: UpdateConversationDto) {
+    await this.get(conversationId); // 确保存在，否则抛异常
+    return this.prisma.chatConversation.update({
+      where: { id: conversationId },
+      data: {
+        ...(dto.title !== undefined && { title: dto.title }),
+        ...(dto.model !== undefined && { model: dto.model }),
+        ...(dto.systemPrompt !== undefined && { systemPrompt: dto.systemPrompt }),
+        ...(dto.status !== undefined && { status: dto.status }),
+      },
+    });
+  }
+
+  /** 更新会话的最后消息时间和统计 */
+  async touch(conversationId: number, tokens: number) {
+    return this.prisma.chatConversation.update({
+      where: { id: conversationId },
+      data: {
+        lastMessageAt: new Date(),
+        messageCount: { increment: 2 }, // user + assistant
+        totalTokens: { increment: tokens },
+      },
+    });
+  }
+
+  /** 软删除会话 */
+  async delete(conversationId: number) {
+    await this.get(conversationId); // 确保存在
+    return this.prisma.chatConversation.update({
+      where: { id: conversationId },
+      data: { status: 3 },
+    });
+  }
+
+  /** AI 生成会话标题 */
+  async generateTitle(conversationId: number, dto: GenerateTitleDto) {
+    const conv = await this.get(conversationId);
+
+    // 已有非默认标题则跳过
+    if (conv.title && conv.title !== "新会话") {
+      return { title: conv.title };
+    }
+
+    // 取第一条用户消息内容
+    const firstUserMsg = dto.messages.find((m) => m.role === "user");
+    if (!firstUserMsg) {
+      return { title: conv.title ?? "新会话" };
+    }
+
+    const ai = new AiEngine();
+    try {
+      const title = await ai.chat(
+        `Generate a concise title (max 20 characters, prefer Chinese) for a conversation that starts with: "${firstUserMsg.content}". Output ONLY the title, no quotes, no explanation.`,
+      );
+
+      const cleanTitle = title.trim().slice(0, 50);
+      await this.update(conversationId, { title: cleanTitle });
+      return { title: cleanTitle };
+    } catch {
+      // AI 生成失败，用首条消息前 50 字作为 fallback
+      const fallback = firstUserMsg.content.slice(0, 50);
+      await this.update(conversationId, { title: fallback });
+      return { title: fallback };
+    }
+  }
+}

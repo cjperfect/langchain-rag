@@ -1,6 +1,14 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -10,18 +18,16 @@ import {
   ThreadListItemPrimitive,
   ThreadListPrimitive,
   useAuiState,
+  useThreadListItemRuntime,
 } from "@assistant-ui/react";
-import {
-  ArchiveIcon,
-  MoreHorizontalIcon,
-  PlusIcon,
-  SearchIcon,
-  TrashIcon,
-} from "lucide-react";
+import { MoreHorizontalIcon, PencilIcon, PlusIcon, SearchIcon, TrashIcon } from "lucide-react";
 import {
   forwardRef,
   Fragment,
+  useCallback,
+  useEffect,
   useMemo,
+  useRef,
   useState,
   type ComponentPropsWithoutRef,
   type FC,
@@ -34,9 +40,7 @@ export const ThreadList: FC = () => {
   return (
     <ThreadListRoot>
       <ThreadListNew />
-      {hasThreads && (
-        <ThreadListSearch value={search} onValueChange={setSearch} />
-      )}
+      {hasThreads && <ThreadListSearch value={search} onValueChange={setSearch} />}
       <ThreadListItems searchQuery={hasThreads ? search : ""} />
     </ThreadListRoot>
   );
@@ -71,9 +75,10 @@ export const ThreadListSearch = forwardRef<
 
 ThreadListSearch.displayName = "ThreadListSearch";
 
-export const ThreadListRoot: FC<
-  ComponentPropsWithoutRef<typeof ThreadListPrimitive.Root>
-> = ({ className, ...props }) => {
+export const ThreadListRoot: FC<ComponentPropsWithoutRef<typeof ThreadListPrimitive.Root>> = ({
+  className,
+  ...props
+}) => {
   return (
     <ThreadListPrimitive.Root
       data-slot="aui_thread-list-root"
@@ -83,9 +88,11 @@ export const ThreadListRoot: FC<
   );
 };
 
-export const ThreadListItems: FC<
-  ComponentPropsWithoutRef<"div"> & { searchQuery?: string }
-> = ({ className, searchQuery = "", ...props }) => {
+export const ThreadListItems: FC<ComponentPropsWithoutRef<"div"> & { searchQuery?: string }> = ({
+  className,
+  searchQuery = "",
+  ...props
+}) => {
   return (
     <div
       data-slot="aui_thread-list-items"
@@ -104,10 +111,7 @@ export const ThreadListItems: FC<
 
 const DAY_IN_MS = 86_400_000;
 
-const dateGroupLabel = (
-  date: Date | undefined,
-  startOfToday: number,
-): string => {
+const dateGroupLabel = (date: Date | undefined, startOfToday: number): string => {
   if (!date || date.getTime() >= startOfToday) return "今天";
   if (date.getTime() >= startOfToday - DAY_IN_MS) return "昨天";
   return "更早";
@@ -115,9 +119,7 @@ const dateGroupLabel = (
 
 type ThreadListGroup = { label: string; indices: number[] };
 
-const ThreadListItemGroups: FC<{ searchQuery?: string }> = ({
-  searchQuery = "",
-}) => {
+const ThreadListItemGroups: FC<{ searchQuery?: string }> = ({ searchQuery = "" }) => {
   const threadIds = useAuiState((s) => s.threads.threadIds);
   const threadItems = useAuiState((s) => s.threads.threadItems);
 
@@ -129,11 +131,7 @@ const ThreadListItemGroups: FC<{ searchQuery?: string }> = ({
     const filteredIndices = threadIds
       .map((id, index) => ({ id, index }))
       .filter(
-        ({ id }) =>
-          !query ||
-          (itemsById.get(id)?.title || "新会话")
-            .toLowerCase()
-            .includes(query),
+        ({ id }) => !query || (itemsById.get(id)?.title || "新会话").toLowerCase().includes(query),
       )
       .map(({ index }) => index);
     if (!filteredIndices.some((index) => dates[index])) {
@@ -141,13 +139,8 @@ const ThreadListItemGroups: FC<{ searchQuery?: string }> = ({
     }
 
     const now = new Date();
-    const startOfToday = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate(),
-    ).getTime();
-    const time = (index: number) =>
-      dates[index]?.getTime() ?? Number.MAX_SAFE_INTEGER;
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const time = (index: number) => dates[index]?.getTime() ?? Number.MAX_SAFE_INTEGER;
     const sorted = [...filteredIndices].sort((a, b) => time(b) - time(a));
 
     const result: ThreadListGroup[] = [];
@@ -165,10 +158,7 @@ const ThreadListItemGroups: FC<{ searchQuery?: string }> = ({
 
   if (query && filteredIndices.length === 0) {
     return (
-      <div
-        data-slot="aui_thread-list-empty"
-        className="text-muted-foreground px-2.5 py-4 text-sm"
-      >
+      <div data-slot="aui_thread-list-empty" className="text-muted-foreground px-2.5 py-4 text-sm">
         未找到会话
       </div>
     );
@@ -221,10 +211,7 @@ export const ThreadListNew = forwardRef<
       >
         {children ?? (
           <>
-            <PlusIcon
-              data-slot="aui_thread-list-new-icon"
-              className="size-4 shrink-0"
-            />
+            <PlusIcon data-slot="aui_thread-list-new-icon" className="size-4 shrink-0" />
             <span
               data-slot="aui_thread-list-new-label"
               className={cn("whitespace-nowrap", labelClassName)}
@@ -251,10 +238,7 @@ const ThreadListSkeleton: FC = () => {
           data-slot="aui_thread-list-skeleton-wrapper"
           className="flex h-8 items-center px-2.5"
         >
-          <Skeleton
-            data-slot="aui_thread-list-skeleton"
-            className="h-3.5 w-full"
-          />
+          <Skeleton data-slot="aui_thread-list-skeleton" className="h-3.5 w-full" />
         </div>
       ))}
     </div>
@@ -262,6 +246,32 @@ const ThreadListSkeleton: FC = () => {
 };
 
 export const ThreadListItem: FC = () => {
+  const runtime = useThreadListItemRuntime();
+  const [isRenaming, setIsRenaming] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const startRename = useCallback(() => {
+    setIsRenaming(true);
+  }, []);
+
+  const commitRename = useCallback(() => {
+    const newTitle = inputRef.current?.value.trim();
+    if (newTitle && newTitle !== (runtime.getState().title ?? "")) {
+      runtime.rename(newTitle);
+    }
+    setIsRenaming(false);
+  }, [runtime]);
+
+  useEffect(() => {
+    if (isRenaming) {
+      const el = inputRef.current;
+      if (el) {
+        el.focus();
+        el.select();
+      }
+    }
+  }, [isRenaming]);
+
   return (
     <ThreadListItemPrimitive.Root
       data-slot="aui_thread-list-item"
@@ -271,58 +281,97 @@ export const ThreadListItem: FC = () => {
         data-slot="aui_thread-list-item-trigger"
         className="focus-visible:ring-ring/50 flex h-full min-w-0 flex-1 items-center rounded-md px-2.5 text-start text-sm outline-none group-hover:pe-9 group-has-focus-visible:pe-9 group-has-data-[state=open]:pe-9 group-data-active:pe-9 focus-visible:ring-[3px]"
       >
-        <span
-          data-slot="aui_thread-list-item-title"
-          className="min-w-0 flex-1 truncate"
-        >
-          <ThreadListItemPrimitive.Title fallback="新会话" />
-        </span>
+        {isRenaming ? (
+          <input
+            ref={inputRef}
+            data-slot="aui_thread-list-item-rename-input"
+            defaultValue={runtime.getState().title ?? ""}
+            onBlur={commitRename}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitRename();
+              if (e.key === "Escape") setIsRenaming(false);
+            }}
+            className="bg-background ring-ring/50 h-5 w-full rounded-sm px-0.5 text-sm outline-none ring-[3px]"
+          />
+        ) : (
+          <span data-slot="aui_thread-list-item-title" className="min-w-0 flex-1 truncate">
+            <ThreadListItemPrimitive.Title fallback="新会话" />
+          </span>
+        )}
       </ThreadListItemPrimitive.Trigger>
-      <ThreadListItemMore />
+      <ThreadListItemMore onRequestRename={startRename} />
     </ThreadListItemPrimitive.Root>
   );
 };
 
-const ThreadListItemMore: FC = () => {
+const ThreadListItemMore: FC<{ onRequestRename: () => void }> = ({ onRequestRename }) => {
+  const runtime = useThreadListItemRuntime();
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  const handleDelete = useCallback(() => {
+    setDeleteDialogOpen(false);
+    runtime.delete();
+  }, [runtime]);
+
   return (
-    <ThreadListItemMorePrimitive.Root sharedFocusGroup>
-      <ThreadListItemMorePrimitive.Trigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          data-slot="aui_thread-list-item-more"
-          className="data-[state=open]:bg-accent absolute end-1.5 top-1/2 size-6 -translate-y-1/2 p-0 opacity-0 group-hover:opacity-100 group-has-focus-visible:opacity-100 group-data-active:opacity-100 data-[state=open]:opacity-100"
+    <>
+      <ThreadListItemMorePrimitive.Root sharedFocusGroup>
+        <ThreadListItemMorePrimitive.Trigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            data-slot="aui_thread-list-item-more"
+            className="data-[state=open]:bg-accent absolute end-1.5 top-1/2 size-6 -translate-y-1/2 p-0 opacity-0 group-hover:opacity-100 group-has-focus-visible:opacity-100 group-data-active:opacity-100 data-[state=open]:opacity-100"
+          >
+            <MoreHorizontalIcon className="size-3.5" />
+            <span className="sr-only">更多选项</span>
+          </Button>
+        </ThreadListItemMorePrimitive.Trigger>
+        <ThreadListItemMorePrimitive.Content
+          side="right"
+          align="start"
+          sideOffset={6}
+          data-slot="aui_thread-list-item-more-content"
+          className="bg-popover/95 text-popover-foreground data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:animate-out data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 min-w-32 overflow-hidden rounded-xl border p-1.5 shadow-lg backdrop-blur-sm"
         >
-          <MoreHorizontalIcon className="size-3.5" />
-          <span className="sr-only">更多选项</span>
-        </Button>
-      </ThreadListItemMorePrimitive.Trigger>
-      <ThreadListItemMorePrimitive.Content
-        side="right"
-        align="start"
-        sideOffset={6}
-        data-slot="aui_thread-list-item-more-content"
-        className="bg-popover/95 text-popover-foreground data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:animate-out data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 min-w-32 overflow-hidden rounded-xl border p-1.5 shadow-lg backdrop-blur-sm"
-      >
-        <ThreadListItemPrimitive.Archive asChild>
           <ThreadListItemMorePrimitive.Item
             data-slot="aui_thread-list-item-more-item"
             className="hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm outline-none select-none"
+            onClick={onRequestRename}
           >
-            <ArchiveIcon className="size-4" />
-            归档
+            <PencilIcon className="size-4" />
+            重命名
           </ThreadListItemMorePrimitive.Item>
-        </ThreadListItemPrimitive.Archive>
-        <ThreadListItemPrimitive.Delete asChild>
+
           <ThreadListItemMorePrimitive.Item
             data-slot="aui_thread-list-item-more-item"
             className="text-destructive hover:bg-destructive/10 hover:text-destructive focus:bg-destructive/10 focus:text-destructive flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm outline-none select-none"
+            onClick={() => setDeleteDialogOpen(true)}
           >
             <TrashIcon className="size-4" />
             删除
           </ThreadListItemMorePrimitive.Item>
-        </ThreadListItemPrimitive.Delete>
-      </ThreadListItemMorePrimitive.Content>
-    </ThreadListItemMorePrimitive.Root>
+        </ThreadListItemMorePrimitive.Content>
+      </ThreadListItemMorePrimitive.Root>
+
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>确认删除</DialogTitle>
+            <DialogDescription>
+              此操作不可撤销。确定要删除这个会话吗？
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+              取消
+            </Button>
+            <Button variant="destructive" onClick={handleDelete}>
+              确认删除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };

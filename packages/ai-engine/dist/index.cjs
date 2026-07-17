@@ -238,6 +238,18 @@ var activitySqlTool = (0, import_langchain.tool)(
 );
 
 // src/agent/index.ts
+function toLangChainMessages(messages) {
+  return messages.map((m) => {
+    switch (m.role) {
+      case "user":
+        return new import_messages.HumanMessage(m.content);
+      case "assistant":
+        return new import_messages.AIMessage(m.content);
+      case "system":
+        return new import_messages.SystemMessage(m.content);
+    }
+  });
+}
 var AiEngine = class _AiEngine {
   /**
    * Agent 全局单例
@@ -251,7 +263,7 @@ var AiEngine = class _AiEngine {
    * 普通对话
    */
   async chat(input, options = {}) {
-    const messages = [...options.history ?? [], new import_messages.HumanMessage(input)];
+    const messages = [...toLangChainMessages(options.history ?? []), new import_messages.HumanMessage(input)];
     const res = await _AiEngine.agent.invoke({
       messages
     });
@@ -262,7 +274,7 @@ var AiEngine = class _AiEngine {
    * LangChain Stream
    */
   async *stream(input, options = {}) {
-    const messages = [...options.history ?? [], new import_messages.HumanMessage(input)];
+    const messages = [...toLangChainMessages(options.history ?? []), new import_messages.HumanMessage(input)];
     const stream = await _AiEngine.agent.stream(
       { messages },
       {
@@ -279,7 +291,7 @@ var AiEngine = class _AiEngine {
    * Stream Events
    */
   async *streamEvents(input, options = {}) {
-    const messages = [...options.history ?? [], new import_messages.HumanMessage(input)];
+    const messages = [...toLangChainMessages(options.history ?? []), new import_messages.HumanMessage(input)];
     const stream = await _AiEngine.agent.streamEvents(
       { messages },
       {
