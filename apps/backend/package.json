@@ -12,6 +12,8 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "db:migrate": "npx prisma migrate dev --name init",
+    "db:generate": "npx prisma generate",
+    "db:seed": "npx tsx src/seed.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",

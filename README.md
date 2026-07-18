@@ -4,13 +4,13 @@
 
 ## 技术栈
 
-| 模块 | 技术 |
-|---|---|
-| 前端 | Next.js 16 (Turbopack) + React 19 + Tailwind CSS 4 + shadcn/ui + assistant-ui |
-| 后端 | NestJS 11 + Prisma 7 |
-| AI 引擎 | LangChain.js + DeepSeek |
-| 数据库 | PostgreSQL 17 + pgvector |
-| 构建工具 | pnpm workspace + tsup + oxlint/oxfmt |
+| 模块     | 技术                                                                          |
+| -------- | ----------------------------------------------------------------------------- |
+| 前端     | Next.js 16 (Turbopack) + React 19 + Tailwind CSS 4 + shadcn/ui + assistant-ui |
+| 后端     | NestJS 11 + Prisma 7                                                          |
+| AI 引擎  | LangChain.js + DeepSeek                                                       |
+| 数据库   | PostgreSQL 17 + pgvector                                                      |
+| 构建工具 | pnpm workspace + tsup + oxlint/oxfmt                                          |
 
 ## 项目结构
 
@@ -44,25 +44,12 @@ pnpm install
 
 ### 2. 环境变量配置
 
-三个项目各自需要 `.env` 文件，参考对应的 `.env.example` 模板：
-
 **apps/backend/.env**
 
 ```env
+cp .env.example .env
+
 DATABASE_URL=postgresql://root:chenjiang@localhost:5432/langchain_rag
-DEEPSEEK_API_KEY=your-deepseek-api-key
-```
-
-**apps/frontend/.env**
-
-```env
-DEEPSEEK_API_KEY=your-deepseek-api-key
-DEEPSEEK_API_BASE_URL=https://api.deepseek.com
-```
-
-**packages/ai-engine/.env**
-
-```env
 DEEPSEEK_API_KEY=your-deepseek-api-key
 ```
 
@@ -75,13 +62,11 @@ docker compose -f docker/docker-compose.yml up -d
 ### 4. 初始化数据库
 
 ```bash
-cd apps/backend
+pnpm db:migrate
 
-# 生成 Prisma Client
-npx prisma generate
+# 生成测试数据
+pnpm db:seed
 
-# 运行数据库迁移（创建表结构）
-npx prisma migrate dev
 ```
 
 ### 5. 启动 AI 引擎（开发模式）
@@ -105,24 +90,7 @@ pnpm dev:backend
 pnpm dev:frontend
 ```
 
-## 一键启动（开发）
-
-在项目根目录依次执行：
-
-```bash
-# 终端 1：启动 PostgreSQL
-docker compose -f docker/docker-compose.yml up -d
-
-# 终端 2：构建并监听 AI 引擎
-pnpm dev:ai-engine
-
-# 终端 3：启动后端
-pnpm dev:backend
-
-# 终端 4：启动前端
-pnpm dev:frontend
-```
-
 启动后访问：
+
 - 前端：http://localhost:3000
 - 后端 API：http://localhost:3001
