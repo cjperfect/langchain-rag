@@ -73,7 +73,7 @@ export function HighlightOverlay({
             <span
               key={i}
               data-slot="highlight-overlay-mention"
-              className="text-emerald-700 dark:text-emerald-300 bg-emerald-100/90 dark:bg-emerald-900/40 rounded-[3px] -mx-0.5 px-0.5"
+              className="text-emerald-700 dark:text-emerald-300 bg-emerald-100/90 dark:bg-emerald-900/40 rounded-3xl -mx-0.5 py-1 px-2"
             >
               @{seg.label}
             </span>

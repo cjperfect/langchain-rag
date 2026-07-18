@@ -46,7 +46,7 @@ export function createDirectiveText(
             <Badge
               key={i}
               variant="success"
-              size="sm"
+              size="lg"
               data-slot="directive-text-chip"
               data-directive-type={seg.type}
               data-directive-id={seg.id}
