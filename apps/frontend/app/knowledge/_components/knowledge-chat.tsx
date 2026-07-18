@@ -122,7 +122,7 @@ export function KnowledgeChat({ knowledgeBaseId, knowledgeBaseName }: KnowledgeC
 
         {/* 聊天区域 */}
         <div className="flex-1 overflow-hidden">
-          <Thread components={components} />
+          <Thread components={components} enableMentions={false} />
         </div>
       </div>
     </AssistantRuntimeProvider>

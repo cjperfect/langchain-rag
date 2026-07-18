@@ -2,23 +2,26 @@ import { ComposerPrimitive } from "@assistant-ui/react";
 import { unstable_useMentionAdapter } from "@assistant-ui/react";
 import { ComposerTriggerPopover } from "@/components/assistant-ui/composer-trigger-popover";
 import { HighlightOverlay } from "@/components/assistant-ui/highlight-overlay";
+import { ThreadEnableMentionsContext } from "@/components/assistant-ui/thread";
 import { atMentionFormatter } from "@/lib/directive-formatter";
 import { LibraryIcon } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useContext } from "react";
 import { getKnowledgeBases } from "@/mock/knowledge-api";
 import { knowledgeBaseRegistry } from "@/lib/knowledge-base-registry";
 import type { KnowledgeBase } from "@/mock/knowledge-api";
 
 export function ComposerInput() {
+  const enableMentions = useContext(ThreadEnableMentionsContext);
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
+    if (!enableMentions) return;
     getKnowledgeBases().then((kbs) => {
       setKnowledgeBases(kbs);
       knowledgeBaseRegistry.setAll(kbs);
     });
-  }, []);
+  }, [enableMentions]);
 
   // @ 提及配置 — 选择知识库
   const mention = unstable_useMentionAdapter({
@@ -32,7 +35,22 @@ export function ComposerInput() {
     })),
   });
 
-  // 2. 渲染UI
+  // 无 @ 提及模式（知识库聊天等场景）
+  if (!enableMentions) {
+    return (
+      <ComposerPrimitive.Input
+        ref={textareaRef}
+        placeholder="发送消息"
+        className="aui-composer-input caret-primary placeholder:text-muted-foreground/80 max-h-32 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base outline-none"
+        rows={1}
+        autoFocus
+        enterKeyHint="send"
+        aria-label="消息输入框"
+      />
+    );
+  }
+
+  // @ 提及模式
   return (
     <ComposerPrimitive.Unstable_TriggerPopoverRoot>
       <div className="relative">
