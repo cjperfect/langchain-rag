@@ -1,20 +1,117 @@
 import { ChatModelAdapter } from "@assistant-ui/react";
+import { post } from "@/lib/api";
 import { getConversationId } from "./remote-thread-list-adapter";
+import { knowledgeBaseRegistry } from "@/lib/knowledge-base-registry";
+import { atMentionFormatter } from "@/lib/directive-formatter";
 
-// SSE done 事件中返回的 response_message_id，作为下次请求的 parent
+async function* streamChat(body: Record<string, unknown>) {
+  const response = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("No reader available");
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let fullText = "";
+  let fullReasoning = "";
+  const toolParts: any[] = [];
+
+  const buildParts = (): any[] => {
+    const parts: any[] = [];
+    if (fullReasoning) parts.push({ type: "reasoning", text: fullReasoning });
+    if (fullText) parts.push({ type: "text", text: fullText });
+    parts.push(...toolParts);
+    return parts;
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const blocks = buffer.split("\n\n");
+    buffer = blocks.pop() || "";
+
+    for (const block of blocks) {
+      let eventType = "message";
+      let dataStr = "";
+
+      for (const line of block.split("\n")) {
+        if (line.startsWith("event: ")) eventType = line.slice(7).trim();
+        else if (line.startsWith("data: ")) dataStr = line.slice(6);
+      }
+
+      if (!dataStr) continue;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const d = JSON.parse(dataStr) as any;
+
+      switch (eventType) {
+        case "error":
+          throw new Error(d.error ?? "未知错误");
+        case "reasoning":
+          if (d.content) {
+            fullReasoning += d.content;
+            yield { content: buildParts() };
+          }
+          break;
+        case "tool_start":
+          toolParts.push({
+            type: "tool-call",
+            toolCallId: `tool_${toolParts.length}`,
+            toolName: d.toolName ?? "unknown",
+            args: {},
+            argsText: "",
+          });
+          yield { content: buildParts() };
+          break;
+        case "tool_end": {
+          const last = toolParts[toolParts.length - 1];
+          if (last) last.result = d.result;
+          yield { content: buildParts() };
+          break;
+        }
+        case "message":
+          if (d.content) {
+            fullText += d.content;
+            yield { content: buildParts() };
+          }
+          break;
+        case "done":
+          yield {
+            content: buildParts(),
+            metadata: {
+              custom: {
+                request_message_id: d.request_message_id,
+                response_message_id: d.response_message_id,
+              },
+            },
+          };
+          break;
+      }
+    }
+  }
+}
+
 let lastResponseMessageId: number | null = null;
 
 export const chatAdapter: ChatModelAdapter = {
-  async *run({ messages, unstable_threadId, context }) {
+  async *run({ messages, context, unstable_threadId }) {
     const lastMessage = messages[messages.length - 1];
-    const userContent = lastMessage?.content ?? [];
-    const userMessage = userContent
-      .filter((part): part is { type: "text"; text: string } => part.type === "text")
-      .map((part) => part.text)
-      .join("\n\n");
+    const userMessage =
+      lastMessage?.content
+        ?.filter((p): p is { type: "text"; text: string } => p.type === "text")
+        .map((p) => p.text)
+        .join("\n") ?? "";
 
-    // parent_message_id：优先用 SSE 缓存的（当前会话），
-    // 否则从已加载的历史消息中取最后一条 assistant 的 id（旧会话，HistoryProvider 写入的后端 ID）
     let parentMessageId = lastResponseMessageId;
     if (!parentMessageId) {
       for (let i = messages.length - 1; i >= 0; i--) {
@@ -27,137 +124,66 @@ export const chatAdapter: ChatModelAdapter = {
 
     const conversationId = getConversationId(unstable_threadId);
 
+    // Extract @mention labels and look up their KB IDs
+    const mentions = atMentionFormatter
+      .parse(userMessage)
+      .filter((seg) => seg.kind === "mention")
+      .map((seg) => seg.label);
+    const kbIds = knowledgeBaseRegistry.getIds(mentions);
+
     const body: Record<string, unknown> = { prompt: userMessage };
-    if (conversationId) {
-      body.chat_session_id = conversationId;
-    }
-    if (parentMessageId) {
-      body.parent_message_id = parentMessageId;
-    }
-    if (context.config?.modelName) {
-      body.model = context.config.modelName;
-    }
+    if (conversationId) body.chat_session_id = conversationId;
+    if (parentMessageId) body.parent_message_id = parentMessageId;
+    if (kbIds.length > 0) body.knowledge_ids = kbIds;
+    if (context.config?.modelName) body.model = context.config.modelName;
 
-    const response = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const reader = response.body?.getReader();
-    const decoder = new TextDecoder();
-
-    if (!reader) {
-      throw new Error("No reader available");
-    }
-
-    let buffer = "";
-    let fullText = "";
-    let fullReasoning = "";
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const toolParts: Record<string, any>[] = [];
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const buildContent = (text: string, reasoning: string, tools: Record<string, any>[]): any[] => {
-      const parts: any[] = [];
-      if (reasoning) parts.push({ type: "reasoning", text: reasoning } as any);
-      if (text) parts.push({ type: "text", text } as any);
-      parts.push(...tools);
-      return parts;
-    };
-
-    while (true) {
-      const { done, value } = await reader.read();
-
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const blocks = buffer.split("\n\n");
-      buffer = blocks.pop() || "";
-
-      for (const block of blocks) {
-        let eventType = "message";
-        let dataStr = "";
-
-        for (const line of block.split("\n")) {
-          if (line.startsWith("event: ")) {
-            eventType = line.slice(7).trim();
-          } else if (line.startsWith("data: ")) {
-            dataStr = line.slice(6);
-          }
-        }
-
-        if (!dataStr) continue;
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let sseData: Record<string, any>;
-        try {
-          sseData = JSON.parse(dataStr);
-        } catch {
-          continue;
-        }
-
-        switch (eventType) {
-          case "error":
-            throw new Error(sseData.error ?? "未知错误");
-
-          case "reasoning":
-            if (sseData.content) {
-              fullReasoning += sseData.content;
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              yield { content: buildContent(fullText, fullReasoning, toolParts) } as any;
-            }
-            break;
-
-          case "tool_start":
-            toolParts.push({
-              type: "tool-call",
-              toolCallId: `tool_${toolParts.length}`,
-              toolName: sseData.toolName ?? "unknown",
-              args: {},
-              argsText: "",
-            } as any);
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            yield { content: buildContent(fullText, fullReasoning, toolParts) } as any;
-            break;
-
-          case "tool_end": {
-            const lastTool = toolParts[toolParts.length - 1];
-            if (lastTool) lastTool.result = sseData.result;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            yield { content: buildContent(fullText, fullReasoning, toolParts) } as any;
-            break;
-          }
-
-          case "message":
-            if (sseData.content) {
-              fullText += sseData.content;
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              yield { content: buildContent(fullText, fullReasoning, toolParts) } as any;
-            }
-            break;
-
-          case "done":
-            if (sseData.response_message_id) {
-              lastResponseMessageId = sseData.response_message_id;
-            }
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            yield {
-              content: buildContent(fullText, fullReasoning, toolParts),
-              metadata: {
-                custom: {
-                  request_message_id: sseData.request_message_id,
-                  response_message_id: sseData.response_message_id,
-                },
-              },
-            } as any;
-            break;
-        }
+    for await (const chunk of streamChat(body)) {
+      if (chunk.metadata?.custom?.response_message_id) {
+        lastResponseMessageId = chunk.metadata.custom.response_message_id;
       }
+      yield chunk;
     }
   },
 };
+
+export function createKnowledgeChatAdapter(knowledgeBaseId: number, knowledgeBaseName: string): ChatModelAdapter {
+  let conversationId: number | null = null;
+  let initPromise: Promise<void> | null = null;
+
+  const ensureConversation = async () => {
+    if (conversationId) return;
+    if (initPromise) {
+      await initPromise;
+      return;
+    }
+    initPromise = (async () => {
+      const conv = await post<{ id: number }>("/conversations", {
+        title: `知识库 - ${knowledgeBaseName}`,
+      });
+      conversationId = conv.id;
+    })();
+    await initPromise;
+  };
+
+  return {
+    async *run({ messages, context }) {
+      await ensureConversation();
+
+      const lastMessage = messages[messages.length - 1];
+      const userMessage =
+        lastMessage?.content
+          ?.filter((p): p is { type: "text"; text: string } => p.type === "text")
+          .map((p) => p.text)
+          .join("\n") ?? "";
+
+      const body: Record<string, unknown> = {
+        prompt: userMessage,
+        chat_session_id: conversationId,
+        knowledge_id: knowledgeBaseId,
+      };
+      if (context.config?.modelName) body.model = context.config.modelName;
+
+      yield* streamChat(body);
+    },
+  };
+}

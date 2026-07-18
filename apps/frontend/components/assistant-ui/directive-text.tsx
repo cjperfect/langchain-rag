@@ -3,7 +3,7 @@
 import { memo, type FC } from "react";
 import type { TextMessagePartComponent } from "@assistant-ui/react";
 import type { Unstable_DirectiveFormatter } from "@assistant-ui/react";
-import { unstable_defaultDirectiveFormatter } from "@assistant-ui/react";
+import { atMentionFormatter } from "@/lib/directive-formatter";
 import { Badge } from "./badge";
 
 type IconComponent = FC<{ className?: string }>;
@@ -45,7 +45,7 @@ export function createDirectiveText(
           return (
             <Badge
               key={i}
-              variant="info"
+              variant="success"
               size="sm"
               data-slot="directive-text-chip"
               data-directive-type={seg.type}
@@ -65,9 +65,7 @@ export function createDirectiveText(
   return Component;
 }
 
-const DirectiveTextImpl = createDirectiveText(
-  unstable_defaultDirectiveFormatter,
-);
+const DirectiveTextImpl = createDirectiveText(atMentionFormatter);
 
 /** `Text` message part component that renders directive syntax as inline chips. */
 export const DirectiveText: TextMessagePartComponent = memo(DirectiveTextImpl);
