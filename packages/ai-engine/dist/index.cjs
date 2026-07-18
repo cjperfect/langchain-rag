@@ -294,10 +294,7 @@ var AiEngine = class _AiEngine {
    */
   async *stream(input, options = {}) {
     const messages = [...toLangChainMessages(options.history ?? []), new import_messages.HumanMessage(input)];
-    const stream = await this.getAgent(options.model).stream(
-      { messages },
-      { streamMode: "messages" }
-    );
+    const stream = await this.getAgent(options.model).stream({ messages }, { streamMode: "messages" });
     for await (const [chunk] of stream) {
       if (typeof chunk.content === "string") {
         yield chunk.content;

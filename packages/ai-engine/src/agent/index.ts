@@ -5,18 +5,7 @@ import { ChatOpenAI } from "@langchain/openai";
 import { model as defaultModel } from "./model";
 import { systemPrompt } from "../prompts";
 import { activitySqlTool } from "../tools/activity-sql";
-
-/** 后端传入的上下文消息格式（与 LangChain 解耦） */
-export interface ContextMessage {
-  role: "user" | "assistant" | "system";
-  content: string;
-}
-
-export interface ChatOptions {
-  history?: ContextMessage[];
-  /** 模型覆盖（不传则用默认 DeepSeek-v4-flash） */
-  model?: string;
-}
+import type { ContextMessage, ChatOptions } from "@langchain-rag/shared/interfaces";
 
 /** 将通用消息格式转为 LangChain BaseMessage */
 function toLangChainMessages(messages: ContextMessage[]): BaseMessage[] {
@@ -84,10 +73,7 @@ export class AiEngine {
   async *stream(input: string, options: ChatOptions = {}): AsyncGenerator<string> {
     const messages = [...toLangChainMessages(options.history ?? []), new HumanMessage(input)];
 
-    const stream = await this.getAgent(options.model).stream(
-      { messages },
-      { streamMode: "messages" },
-    );
+    const stream = await this.getAgent(options.model).stream({ messages }, { streamMode: "messages" });
 
     for await (const [chunk] of stream) {
       if (typeof chunk.content === "string") {
@@ -117,8 +103,7 @@ export class AiEngine {
         case "on_chat_model_stream": {
           const chunk = event.data.chunk as Record<string, unknown>;
           // DeepSeek reasoning content
-          const reasoning = (chunk.additional_kwargs as Record<string, unknown> | undefined)
-            ?.reasoning_content;
+          const reasoning = (chunk.additional_kwargs as Record<string, unknown> | undefined)?.reasoning_content;
           if (typeof reasoning === "string" && reasoning) {
             yield { type: "reasoning", content: reasoning };
           }

@@ -11,6 +11,7 @@
     "dev:frontend": "pnpm --filter @langchain-rag/frontend dev",
     "dev:backend": "pnpm --filter @langchain-rag/backend start:dev",
     "build:shared": "pnpm --filter @langchain-rag/shared build",
+    "dev:shared": "pnpm --filter @langchain-rag/shared dev",
     "build:ai-engine": "pnpm --filter @langchain-rag/ai-engine build",
     "dev:ai-engine": "pnpm --filter @langchain-rag/ai-engine dev",
     "db:migrate": "pnpm --filter @langchain-rag/backend db:migrate",

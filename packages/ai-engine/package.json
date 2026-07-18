@@ -12,6 +12,7 @@
     "dev": "tsup --watch"
   },
   "dependencies": {
+    "@langchain-rag/shared": "workspace:*",
     "@langchain/community": "^1.1.29",
     "@langchain/core": "^1.2.3",
     "@langchain/openai": "^1.5.5",

@@ -1,1 +1,2 @@
-export { ErrorCode } from "./error.enum";
+export * from "./enums";
+export * from "./interfaces";
