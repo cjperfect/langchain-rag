@@ -1,9 +1,10 @@
 import { Injectable } from "@nestjs/common";
 import { ConversationService } from "../conversation/conversation.service";
 import { MessageService } from "../message/message.service";
-import { AiEngine, type ContextMessage } from "@langchain-rag/ai-engine";
+import { AiEngine } from "@langchain-rag/ai-engine";
 import type { ChatDto, ChatStreamEvent } from "./dto/chat.dto";
 import { DEFAULT_MODEL } from "src/common/constants";
+import { ContextMessage } from "@langchain-rag/shared/interfaces";
 
 /**
  * AI Chat 服务 — 组合操作

@@ -26,22 +26,26 @@ module.exports = __toCommonJS(index_exports);
 var import_config = require("dotenv/config");
 
 // src/agent/index.ts
-var import_messages = require("@langchain/core/messages");
+var import_messages2 = require("@langchain/core/messages");
 var import_langchain2 = require("langchain");
-var import_openai2 = require("@langchain/openai");
 
 // src/agent/model.ts
+var import_constants = require("@langchain-rag/shared/constants");
 var import_openai = require("@langchain/openai");
-var model = new import_openai.ChatOpenAI({
-  model: "deepseek-v4-flash",
-  apiKey: process.env.DEEPSEEK_API_KEY,
+var baseConfig = {
+  apiKey: process.env.OPENAI_API_KEY,
   temperature: 0.7,
   maxTokens: 1024,
   timeout: 6e4,
-  configuration: {
-    baseURL: "https://api.deepseek.com"
-  }
-});
+  configuration: { baseURL: process.env.LLM_BASE_URL }
+};
+function createModel(modelName) {
+  return new import_openai.ChatOpenAI({
+    ...baseConfig,
+    model: modelName || import_constants.DEFAULT_MODEL
+  });
+}
+var defaultModel = createModel();
 
 // src/prompts/system.ts
 var systemPrompt = `\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u4F01\u4E1A\u5185\u90E8\u667A\u80FD\u52A9\u624B\uFF0C\u670D\u52A1\u4E8E\u516C\u53F8\u7684\u8FD0\u8425\u3001\u4EA7\u54C1\u548C\u6570\u636E\u56E2\u961F\u3002
@@ -238,7 +242,8 @@ var activitySqlTool = (0, import_langchain.tool)(
   }
 );
 
-// src/agent/index.ts
+// src/libs/messages.ts
+var import_messages = require("@langchain/core/messages");
 function toLangChainMessages(messages) {
   return messages.map((m) => {
     switch (m.role) {
@@ -251,29 +256,20 @@ function toLangChainMessages(messages) {
     }
   });
 }
-function createModel(modelName) {
-  if (!modelName || modelName === model.model) return model;
-  return new import_openai2.ChatOpenAI({
-    model: modelName,
-    apiKey: process.env.DEEPSEEK_API_KEY,
-    temperature: 0.7,
-    maxTokens: 1024,
-    timeout: 6e4,
-    configuration: { baseURL: "https://api.deepseek.com" }
-  });
-}
+
+// src/agent/index.ts
 var AiEngine = class _AiEngine {
   /**
    * Agent 全局单例
    */
   static agent = (0, import_langchain2.createAgent)({
-    model,
+    model: defaultModel,
     tools: [activitySqlTool],
     systemPrompt
   });
   /** 获取 agent（需要切换模型时创建新实例） */
   getAgent(modelName) {
-    if (!modelName || modelName === model.model) return _AiEngine.agent;
+    if (!modelName || modelName === defaultModel.model) return _AiEngine.agent;
     return (0, import_langchain2.createAgent)({
       model: createModel(modelName),
       tools: [activitySqlTool],
@@ -284,16 +280,16 @@ var AiEngine = class _AiEngine {
    * 普通对话
    */
   async chat(input, options = {}) {
-    const messages = [...toLangChainMessages(options.history ?? []), new import_messages.HumanMessage(input)];
+    const messages = [...toLangChainMessages(options.history ?? []), new import_messages2.HumanMessage(input)];
     const res = await this.getAgent(options.model).invoke({ messages });
     const last = res.messages.at(-1);
     return typeof last?.content === "string" ? last.content : JSON.stringify(last?.content);
   }
   /**
-   * LangChain Stream
+   * 流式对话
    */
   async *stream(input, options = {}) {
-    const messages = [...toLangChainMessages(options.history ?? []), new import_messages.HumanMessage(input)];
+    const messages = [...toLangChainMessages(options.history ?? []), new import_messages2.HumanMessage(input)];
     const stream = await this.getAgent(options.model).stream({ messages }, { streamMode: "messages" });
     for await (const [chunk] of stream) {
       if (typeof chunk.content === "string") {
@@ -302,16 +298,16 @@ var AiEngine = class _AiEngine {
     }
   }
   /**
-   * Stream Events
+   * 流式对话 + 观察整个执行过程（token + tool + chain）
    */
   async *streamEvents(input, options = {}) {
-    const messages = [...toLangChainMessages(options.history ?? []), new import_messages.HumanMessage(input)];
+    const messages = [...toLangChainMessages(options.history ?? []), new import_messages2.HumanMessage(input)];
     const stream = await this.getAgent(options.model).streamEvents({ messages }, { version: "v2" });
     for await (const event of stream) {
       switch (event.event) {
         case "on_chat_model_stream": {
           const chunk = event.data.chunk;
-          const reasoning = chunk.additional_kwargs?.reasoning_content;
+          const reasoning = chunk.additional_kwargs?.reasoning || chunk.additional_kwargs?.reasoning_content;
           if (typeof reasoning === "string" && reasoning) {
             yield { type: "reasoning", content: reasoning };
           }

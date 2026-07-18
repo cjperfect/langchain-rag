@@ -1,38 +1,11 @@
-import { BaseMessage, HumanMessage, AIMessage, SystemMessage } from "@langchain/core/messages";
+import { HumanMessage } from "@langchain/core/messages";
 import { createAgent } from "langchain";
-import { ChatOpenAI } from "@langchain/openai";
-
-import { model as defaultModel } from "./model";
+import { createModel, defaultModel } from "./model";
 import { systemPrompt } from "../prompts";
 import { activitySqlTool } from "../tools/activity-sql";
-import type { ContextMessage, ChatOptions } from "@langchain-rag/shared/interfaces";
-
-/** 将通用消息格式转为 LangChain BaseMessage */
-function toLangChainMessages(messages: ContextMessage[]): BaseMessage[] {
-  return messages.map((m) => {
-    switch (m.role) {
-      case "user":
-        return new HumanMessage(m.content);
-      case "assistant":
-        return new AIMessage(m.content);
-      case "system":
-        return new SystemMessage(m.content);
-    }
-  });
-}
-
-/** 按模型名创建 ChatOpenAI 实例 */
-function createModel(modelName?: string): ChatOpenAI {
-  if (!modelName || modelName === defaultModel.model) return defaultModel;
-  return new ChatOpenAI({
-    model: modelName,
-    apiKey: process.env.DEEPSEEK_API_KEY,
-    temperature: 0.7,
-    maxTokens: 1024,
-    timeout: 60000,
-    configuration: { baseURL: "https://api.deepseek.com" },
-  });
-}
+import type { ChatOptions } from "@langchain-rag/shared/interfaces";
+import { toLangChainMessages } from "../libs/messages";
+import { StreamEvent } from "../interfaces/message";
 
 export class AiEngine {
   /**
@@ -46,6 +19,7 @@ export class AiEngine {
 
   /** 获取 agent（需要切换模型时创建新实例） */
   private getAgent(modelName?: string) {
+    // 没有传模型名称或者本身就是默认模型，就直接返回，不需要重新创建
     if (!modelName || modelName === defaultModel.model) return AiEngine.agent;
     return createAgent({
       model: createModel(modelName),
@@ -68,7 +42,7 @@ export class AiEngine {
   }
 
   /**
-   * LangChain Stream
+   * 流式对话
    */
   async *stream(input: string, options: ChatOptions = {}): AsyncGenerator<string> {
     const messages = [...toLangChainMessages(options.history ?? []), new HumanMessage(input)];
@@ -83,17 +57,9 @@ export class AiEngine {
   }
 
   /**
-   * Stream Events
+   * 流式对话 + 观察整个执行过程（token + tool + chain）
    */
-  async *streamEvents(
-    input: string,
-    options: ChatOptions = {},
-  ): AsyncGenerator<
-    | { type: "token"; content: string }
-    | { type: "reasoning"; content: string }
-    | { type: "tool_start"; name?: string }
-    | { type: "tool_end"; name?: string; result?: unknown }
-  > {
+  async *streamEvents(input: string, options: ChatOptions = {}): AsyncGenerator<StreamEvent> {
     const messages = [...toLangChainMessages(options.history ?? []), new HumanMessage(input)];
 
     const stream = await this.getAgent(options.model).streamEvents({ messages }, { version: "v2" });
@@ -101,9 +67,9 @@ export class AiEngine {
     for await (const event of stream) {
       switch (event.event) {
         case "on_chat_model_stream": {
-          const chunk = event.data.chunk as Record<string, unknown>;
-          // DeepSeek reasoning content
-          const reasoning = (chunk.additional_kwargs as Record<string, unknown> | undefined)?.reasoning_content;
+          const chunk = event.data.chunk;
+          // 思考过程
+          const reasoning = chunk.additional_kwargs?.reasoning || chunk.additional_kwargs?.reasoning_content;
           if (typeof reasoning === "string" && reasoning) {
             yield { type: "reasoning", content: reasoning };
           }
@@ -119,7 +85,7 @@ export class AiEngine {
           yield {
             type: "tool_end",
             name: event.name,
-            result: (event.data as { output?: unknown }).output,
+            result: event.data.output,
           };
           break;
       }

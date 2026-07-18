@@ -1,14 +1,21 @@
+import { DEFAULT_MODEL } from "@langchain-rag/shared/constants";
 import { ChatOpenAI } from "@langchain/openai";
 
-export const model = new ChatOpenAI({
-  model: "deepseek-v4-flash",
-  apiKey: process.env.DEEPSEEK_API_KEY,
+const baseConfig = {
+  apiKey: process.env.OPENAI_API_KEY,
   temperature: 0.7,
   maxTokens: 1024,
   timeout: 60000,
-  configuration: {
-    baseURL: "https://api.deepseek.com",
-  },
-});
+  configuration: { baseURL: process.env.LLM_BASE_URL },
+} as const;
 
-export default model;
+/** 按模型名创建 ChatOpenAI 实例 */
+export function createModel(modelName?: string): ChatOpenAI {
+  return new ChatOpenAI({
+    ...baseConfig,
+    model: modelName || DEFAULT_MODEL,
+  });
+}
+
+/** 默认模型单例 */
+export const defaultModel = createModel();

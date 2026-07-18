@@ -20,6 +20,11 @@
       "import": "./dist/enums/index.js",
       "require": "./dist/enums/index.js",
       "types": "./dist/enums/index.d.ts"
+    },
+    "./constants": {
+      "import": "./dist/constants/index.js",
+      "require": "./dist/constants/index.js",
+      "types": "./dist/constants/index.d.ts"
     }
   },
   "scripts": {
