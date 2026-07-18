@@ -69,6 +69,15 @@ pnpm db:seed
 
 ```
 
+### 5. 初始化shared
+
+monorepo子包共用的变量、接口、枚举
+
+```bash
+pnpm build:shared
+
+```
+
 ### 5. 启动 AI 引擎（开发模式）
 
 ```bash

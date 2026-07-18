@@ -14,7 +14,7 @@
  */
 export declare enum ErrorCode {
     /** 成功 */
-    SUCCESS = 0,
+    SUCCESS = 200,
     /** 请求参数错误 */
     BAD_REQUEST = 400,
     /** 未登录 / token 无效 */

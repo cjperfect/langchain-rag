@@ -309,10 +309,7 @@ var AiEngine = class _AiEngine {
    */
   async *streamEvents(input, options = {}) {
     const messages = [...toLangChainMessages(options.history ?? []), new import_messages.HumanMessage(input)];
-    const stream = await this.getAgent(options.model).streamEvents(
-      { messages },
-      { version: "v2" }
-    );
+    const stream = await this.getAgent(options.model).streamEvents({ messages }, { version: "v2" });
     for await (const event of stream) {
       switch (event.event) {
         case "on_chat_model_stream": {
