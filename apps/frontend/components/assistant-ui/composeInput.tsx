@@ -1,7 +1,6 @@
 import { ComposerPrimitive } from "@assistant-ui/react";
 import { unstable_useMentionAdapter } from "@assistant-ui/react";
 import { ComposerTriggerPopover } from "@/components/assistant-ui/composer-trigger-popover";
-import { HighlightOverlay } from "@/components/assistant-ui/highlight-overlay";
 import { ThreadEnableMentionsContext } from "@/components/assistant-ui/thread";
 import { atMentionFormatter } from "@/lib/directive-formatter";
 import { LibraryIcon } from "lucide-react";
@@ -54,18 +53,15 @@ export function ComposerInput() {
   // @ 提及模式
   return (
     <ComposerPrimitive.Unstable_TriggerPopoverRoot>
-      <div className="relative">
-        <HighlightOverlay textareaRef={textareaRef} formatter={atMentionFormatter} />
-        <ComposerPrimitive.Input
-          ref={textareaRef}
-          placeholder="发送消息，输入@选择知识库"
-          className="aui-composer-input text-transparent caret-primary placeholder:text-muted-foreground/80 max-h-32 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base outline-none"
-          rows={1}
-          autoFocus
-          enterKeyHint="send"
-          aria-label="消息输入框"
-        />
-      </div>
+      <ComposerPrimitive.Input
+        ref={textareaRef}
+        placeholder="发送消息，输入@选择知识库"
+        className="aui-composer-input caret-primary placeholder:text-muted-foreground/80 max-h-32 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base outline-none"
+        rows={1}
+        autoFocus
+        enterKeyHint="send"
+        aria-label="消息输入框"
+      />
 
       <ComposerTriggerPopover
         char="@"
