@@ -13,7 +13,12 @@ import { createAssistantStream } from "assistant-stream";
 import type { ExportedMessageRepository } from "@assistant-ui/react";
 import { get, post, patch, del } from "@/lib/api";
 import { useMemo, type FC, type PropsWithChildren } from "react";
-import type { RemoteThreadMetadata, RemoteThreadListResponse, ConversationItem, BackendMessage } from "@/interfaces/chat";
+import type {
+  RemoteThreadMetadata,
+  RemoteThreadListResponse,
+  ConversationItem,
+  BackendMessage,
+} from "@/interfaces/chat";
 
 // ---------------------------------------------------------------------------
 // HistoryProvider — 点击会话时从后端加载历史消息
@@ -54,7 +59,7 @@ const HistoryProvider: FC<PropsWithChildren> = ({ children }) => {
       },
 
       async append() {
-        // 消息由 chat-adapter 的 SSE 流处理
+        // 消息由 chat.adapter 的 SSE 流处理
       },
     }),
     [remoteId],
@@ -111,9 +116,7 @@ export const remoteThreadListAdapter: RemoteThreadListAdapter = {
   },
 
   /** 新建会话 → POST /api/conversations */
-  async initialize(
-    _threadId: string,
-  ): Promise<{ remoteId: string; externalId: string | undefined }> {
+  async initialize(_threadId: string): Promise<{ remoteId: string; externalId: string | undefined }> {
     const conv = await post<ConversationItem>("/conversations", { title: "新会话" });
     lastCreatedId = conv.id;
     return { remoteId: String(conv.id), externalId: undefined };
@@ -136,10 +139,7 @@ export const remoteThreadListAdapter: RemoteThreadListAdapter = {
     await del(`/conversations/${remoteId}`);
   },
 
-  async generateTitle(
-    remoteId: string,
-    _unstable_messages,
-  ): Promise<import("assistant-stream").AssistantStream> {
+  async generateTitle(remoteId: string, _unstable_messages): Promise<import("assistant-stream").AssistantStream> {
     const messagesForBackend = _unstable_messages.map((m) => ({
       role: m.role,
       content: m.content

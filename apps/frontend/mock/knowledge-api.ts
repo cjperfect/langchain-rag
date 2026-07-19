@@ -128,10 +128,10 @@ const MOCK_DOCUMENTS: Record<number, KnowledgeBaseDocument[]> = {
 };
 
 // ============================================================================
-// Mock 切片数据（按文档ID）
+// Mock 文档内容（按文档 ID 生成切片）
 // ============================================================================
 
-function generateMockChunks(docId: number): DocumentChunk[] {
+function generateMockDocContent(docId: number): DocumentChunk[] {
   const contents: Record<string, string[]> = {
     PRD: [
       "## 1. 产品概述\n\n本产品定位为企业级 RAG 智能助手，旨在通过检索增强生成技术提升企业知识管理效率。目标用户包括：\n- 企业知识管理员\n- 业务分析人员\n- 技术开发团队\n\n核心价值主张：让企业知识触手可及。",
@@ -178,7 +178,7 @@ function generateMockChunks(docId: number): DocumentChunk[] {
   });
 }
 
-const MOCK_CHUNKS: Record<number, DocumentChunk[]> = {};
+const MOCK_DOC_CONTENT: Record<number, DocumentChunk[]> = {};
 
 // ============================================================================
 // API 函数（mock 实现，后续替换为真实请求）
@@ -232,7 +232,7 @@ export async function deleteKnowledgeBase(id: number): Promise<void> {
 }
 
 // ============================================================================
-// 文档 & 切片 API
+// 文档内容 API
 // ============================================================================
 
 export async function getDocuments(knowledgeBaseId: number): Promise<KnowledgeBaseDocument[]> {
@@ -243,10 +243,10 @@ export async function getDocuments(knowledgeBaseId: number): Promise<KnowledgeBa
   return delay([...MOCK_DOCUMENTS[knowledgeBaseId]]);
 }
 
-export async function getChunks(documentId: number): Promise<DocumentChunk[]> {
-  // TODO: return get<DocumentChunk[]>(`/documents/${documentId}/chunks`);
-  if (!MOCK_CHUNKS[documentId]) {
-    MOCK_CHUNKS[documentId] = generateMockChunks(documentId);
+export async function getDocumentContent(documentId: number): Promise<DocumentChunk[]> {
+  // TODO: return get<DocumentChunk[]>(`/documents/${documentId}/content`);
+  if (!MOCK_DOC_CONTENT[documentId]) {
+    MOCK_DOC_CONTENT[documentId] = generateMockDocContent(documentId);
   }
-  return delay([...MOCK_CHUNKS[documentId]], 300);
+  return delay([...MOCK_DOC_CONTENT[documentId]], 300);
 }

@@ -5,12 +5,13 @@ import relativeTime from "dayjs/plugin/relativeTime";
 import "dayjs/locale/zh-cn";
 import { FileText, File, FileCode, FileJson } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { KnowledgeBaseDocument, DocumentListProps } from "@/interfaces/knowledge";
+import type { DocumentListProps } from "@/interfaces/knowledge";
+import { FILE_TYPE_COLORS, DEFAULT_FILE_COLOR, formatFileSize } from "@/constants/file-types";
 
 dayjs.extend(relativeTime);
 dayjs.locale("zh-cn");
 
-const typeIcons: Record<string, React.ReactNode> = {
+const FILE_TYPE_ICONS: Record<string, React.ReactNode> = {
   pdf: <File className="size-4 text-red-500" />,
   docx: <File className="size-4 text-blue-500" />,
   md: <FileText className="size-4 text-emerald-500" />,
@@ -23,24 +24,7 @@ const typeIcons: Record<string, React.ReactNode> = {
   pptx: <File className="size-4 text-orange-500" />,
 };
 
-const typeColors: Record<string, string> = {
-  pdf: "bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-400",
-  docx: "bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400",
-  md: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400",
-  txt: "bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
-  sql: "bg-purple-50 text-purple-600 dark:bg-purple-950 dark:text-purple-400",
-  ts: "bg-cyan-50 text-cyan-600 dark:bg-cyan-950 dark:text-cyan-400",
-  tsx: "bg-cyan-50 text-cyan-600 dark:bg-cyan-950 dark:text-cyan-400",
-  js: "bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-400",
-  py: "bg-blue-50 text-blue-500 dark:bg-blue-950 dark:text-blue-400",
-  pptx: "bg-orange-50 text-orange-600 dark:bg-orange-950 dark:text-orange-400",
-};
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
+const DEFAULT_FILE_ICON = <FileText className="size-4 text-muted-foreground" />;
 
 export function DocumentList({ documents, selectedId, onSelect, loading }: DocumentListProps) {
   if (loading) {
@@ -88,17 +72,17 @@ export function DocumentList({ documents, selectedId, onSelect, loading }: Docum
           }`}
         >
           <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted">
-            {typeIcons[doc.fileType] ?? <FileText className="size-4 text-muted-foreground" />}
+            {FILE_TYPE_ICONS[doc.fileType] ?? DEFAULT_FILE_ICON}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">{doc.fileName}</p>
             <p className="text-xs text-muted-foreground">
-              {formatSize(doc.fileSize)} · {doc.chunkCount} 切片 · {dayjs(doc.createdAt).format("MM/DD")}
+              {formatFileSize(doc.fileSize)} · {doc.chunkCount} 切片 · {dayjs(doc.createdAt).format("MM/DD")}
             </p>
           </div>
           <span
             className={`text-[10px] px-1.5 py-0.5 rounded uppercase shrink-0 ${
-              typeColors[doc.fileType] ?? "bg-muted text-muted-foreground"
+              FILE_TYPE_COLORS[doc.fileType] ?? DEFAULT_FILE_COLOR
             }`}
           >
             {doc.fileType}

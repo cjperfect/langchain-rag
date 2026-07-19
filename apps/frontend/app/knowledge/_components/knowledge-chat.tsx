@@ -3,7 +3,7 @@
 import { useMemo, useCallback, useState, type FC } from "react";
 import { AssistantRuntimeProvider, useLocalRuntime } from "@assistant-ui/react";
 import { Thread } from "@/components/assistant-ui/thread";
-import { createKnowledgeChatAdapter } from "@/adapters/chat-adapter";
+import { createKnowledgeChatAdapter } from "@/adapters/chat.adapter";
 import {
   DropdownMenu,
   DropdownMenuContent,

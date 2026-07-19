@@ -4,7 +4,7 @@ import { FileText } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { DocumentViewerProps } from "@/interfaces/knowledge";
 
-export function DocumentViewer({ chunks, fileName, loading }: DocumentViewerProps) {
+export function DocumentViewer({ content, fileName, loading }: DocumentViewerProps) {
   if (!fileName) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
@@ -31,7 +31,7 @@ export function DocumentViewer({ chunks, fileName, loading }: DocumentViewerProp
     );
   }
 
-  if (chunks.length === 0) {
+  if (content.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
         <FileText className="size-10 mb-3" strokeWidth={1.5} />
@@ -40,7 +40,7 @@ export function DocumentViewer({ chunks, fileName, loading }: DocumentViewerProp
     );
   }
 
-  const totalTokens = chunks.reduce((sum, c) => sum + c.tokenCount, 0);
+  const totalTokens = content.reduce((sum, c) => sum + c.tokenCount, 0);
 
   return (
     <div className="h-full overflow-y-auto">
@@ -58,9 +58,9 @@ export function DocumentViewer({ chunks, fileName, loading }: DocumentViewerProp
       {/* 文档正文 */}
       <div className="p-6">
         <article className="text-sm leading-relaxed">
-          {chunks.map((chunk) => (
-            <div key={chunk.id} className="whitespace-pre-wrap mb-4 last:mb-0">
-              {chunk.content}
+          {content.map((segment) => (
+            <div key={segment.id} className="whitespace-pre-wrap mb-4 last:mb-0">
+              {segment.content}
             </div>
           ))}
         </article>

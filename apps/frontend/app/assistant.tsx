@@ -11,8 +11,8 @@ import { Thread } from "@/components/assistant-ui/thread";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { ThreadListSidebar } from "@/components/assistant-ui/threadlist-sidebar";
-import { chatAdapter } from "@/adapters/chat-adapter";
-import { remoteThreadListAdapter } from "@/adapters/remote-thread-list-adapter";
+import { chatAdapter } from "@/adapters/chat.adapter";
+import { remoteThreadListAdapter } from "@/adapters/remote-thread-list.adapter";
 
 const DevToolsModal = dynamic(
   () => import("@assistant-ui/react-devtools").then((m) => ({ default: m.DevToolsModal })),

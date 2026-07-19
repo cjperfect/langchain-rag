@@ -1,6 +1,6 @@
 import { ChatModelAdapter } from "@assistant-ui/react";
 import { post } from "@/lib/api";
-import { getConversationId } from "./remote-thread-list-adapter";
+import { getConversationId } from "./remote-thread-list.adapter";
 import { knowledgeBaseRegistry } from "@/lib/knowledge-base-registry";
 import { atMentionFormatter } from "@/lib/directive-formatter";
 

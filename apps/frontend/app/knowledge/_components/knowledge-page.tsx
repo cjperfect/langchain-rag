@@ -23,7 +23,7 @@ import { CreateDialog } from "./create-dialog";
 import {
   getKnowledgeBases,
   getDocuments,
-  getChunks,
+  getDocumentContent,
   createKnowledgeBase,
   updateKnowledgeBase,
   deleteKnowledgeBase,
@@ -51,8 +51,8 @@ const initialState: PageState = {
   docsLoading: false,
   searchQuery: "",
   selectedDoc: null,
-  chunks: [],
-  chunksLoading: false,
+  docContent: [],
+  docContentLoading: false,
   dialogOpen: false,
   editingKb: null,
   deleteDialogOpen: false,
@@ -75,8 +75,8 @@ export function KnowledgePage() {
     docsLoading,
     searchQuery,
     selectedDoc,
-    chunks,
-    chunksLoading,
+    docContent,
+    docContentLoading,
     dialogOpen,
     editingKb,
     deleteDialogOpen,
@@ -99,15 +99,14 @@ export function KnowledgePage() {
   }, []);
 
   useEffect(() => {
-    fetchKbList().then((data) => {
+    (async () => {
+      const data = await fetchKbList();
       if (data.length === 0) return;
       const first = data[0];
       setState({ selectedKb: first, selectedDoc: null, searchQuery: "", docsLoading: true });
-      getDocuments(first.id).then((docs) => {
-        setState({ documents: docs, docsLoading: false });
-      });
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      const docs = await getDocuments(first.id);
+      setState({ documents: docs, docsLoading: false });
+    })();
   }, [fetchKbList]);
 
   // 选中知识库 → 加载文档
@@ -121,14 +120,19 @@ export function KnowledgePage() {
     setState({ documents: docs, docsLoading: false });
   }, []);
 
-  // 选中文档 → 加载切片
+  // 选中文档 → 加载文档内容
   useEffect(() => {
     const docId = selectedDoc?.id;
     if (!docId) return;
-    setState({ chunksLoading: true });
-    getChunks(docId)
-      .then((chunks) => setState({ chunks }))
-      .finally(() => setState({ chunksLoading: false }));
+    (async () => {
+      setState({ docContentLoading: true });
+      try {
+        const docContent = await getDocumentContent(docId);
+        setState({ docContent });
+      } finally {
+        setState({ docContentLoading: false });
+      }
+    })();
   }, [selectedDoc?.id]);
 
   // 过滤文档
@@ -232,7 +236,7 @@ export function KnowledgePage() {
                     <span className="text-xs text-muted-foreground">{selectedKb.name}</span>
                   </div>
                   <div className="flex-1 overflow-hidden">
-                    <DocumentViewer chunks={chunks} fileName={selectedDoc.fileName} loading={chunksLoading} />
+                    <DocumentViewer content={docContent} fileName={selectedDoc.fileName} loading={docContentLoading} />
                   </div>
                 </div>
               ) : (

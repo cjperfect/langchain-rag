@@ -1,18 +1,7 @@
-import type {
-  Unstable_DirectiveFormatter,
-  Unstable_DirectiveSegment,
-  Unstable_TriggerItem,
-} from "@assistant-ui/react";
+import type { Unstable_DirectiveFormatter, Unstable_DirectiveSegment, Unstable_TriggerItem } from "@assistant-ui/react";
 
 const MENTION_RE = /@([^\s@]{1,128})/gu;
 
-/**
- * Custom directive formatter that uses a clean `@label` format
- * instead of the verbose `:type[label]{name=id}` default format.
- *
- * Serializes trigger items as `@label` and parses `@label`
- * patterns back into mention segments.
- */
 export const atMentionFormatter: Unstable_DirectiveFormatter = {
   serialize(item: Unstable_TriggerItem): string {
     return `@${item.label ?? item.id}`;

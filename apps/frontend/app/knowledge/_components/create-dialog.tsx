@@ -34,7 +34,6 @@ export function CreateDialog({ open, onOpenChange, onSubmit, editingKb }: Create
       setDescription("");
     }
     setError("");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingKb?.id, open]);
 
   const handleSubmit = async () => {

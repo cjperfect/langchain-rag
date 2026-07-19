@@ -62,18 +62,18 @@ const useCopyToClipboard = ({
 } = {}) => {
   const [isCopied, setIsCopied] = useState<boolean>(false);
 
-  const copyToClipboard = (value: string) => {
+  const copyToClipboard = async (value: string) => {
     if (!value || typeof navigator === "undefined" || !navigator.clipboard) {
       return;
     }
 
-    navigator.clipboard.writeText(value).then(
-      () => {
-        setIsCopied(true);
-        setTimeout(() => setIsCopied(false), copiedDuration);
-      },
-      () => {},
-    );
+    try {
+      await navigator.clipboard.writeText(value);
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), copiedDuration);
+    } catch {
+      // 复制失败，静默忽略
+    }
   };
 
   return { isCopied, copyToClipboard };

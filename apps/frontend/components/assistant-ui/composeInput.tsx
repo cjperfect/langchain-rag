@@ -17,10 +17,11 @@ export function ComposerInput() {
 
   useEffect(() => {
     if (!enableMentions) return;
-    getKnowledgeBases().then((kbs) => {
+    (async () => {
+      const kbs = await getKnowledgeBases();
       setKnowledgeBases(kbs);
       knowledgeBaseRegistry.setAll(kbs);
-    });
+    })();
   }, [enableMentions]);
 
   // @ 提及配置 — 选择知识库
