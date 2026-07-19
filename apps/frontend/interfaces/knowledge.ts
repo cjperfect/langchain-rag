@@ -56,6 +56,14 @@ export interface KnowledgeBaseDocument {
   createdAt: string;
 }
 
+/** 新建文档请求参数 */
+export interface CreateDocumentInput {
+  /** 文件名（含扩展名，如 note.md） */
+  fileName: string;
+  /** 文档正文（Markdown 格式） */
+  content: string;
+}
+
 /** 文档切片 */
 export interface DocumentChunk {
   /** 切片 ID */
@@ -112,6 +120,10 @@ export interface PageState {
   deleteDialogOpen: boolean;
   /** 待删除的知识库 */
   deleteTarget: KnowledgeBase | null;
+  /** 新建文档对话框是否打开 */
+  createDocOpen: boolean;
+  /** 上传文档对话框是否打开 */
+  uploadDocOpen: boolean;
 }
 
 // ============================================================================

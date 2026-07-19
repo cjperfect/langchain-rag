@@ -13,6 +13,7 @@ import type {
   CreateKnowledgeBaseInput,
   UpdateKnowledgeBaseInput,
   KnowledgeBaseDocument,
+  CreateDocumentInput,
   DocumentChunk,
 } from "@/interfaces/knowledge";
 
@@ -21,6 +22,7 @@ export type {
   CreateKnowledgeBaseInput,
   UpdateKnowledgeBaseInput,
   KnowledgeBaseDocument,
+  CreateDocumentInput,
   DocumentChunk,
 };
 
@@ -249,4 +251,103 @@ export async function getDocumentContent(documentId: number): Promise<DocumentCh
     MOCK_DOC_CONTENT[documentId] = generateMockDocContent(documentId);
   }
   return delay([...MOCK_DOC_CONTENT[documentId]], 300);
+}
+
+// ============================================================================
+// 文档新建 / 上传 API
+// ============================================================================
+
+/** 将纯文本按段落切分为模拟切片 */
+function textToChunks(text: string): DocumentChunk[] {
+  const paragraphs = text.split(/\n\n+/).filter(Boolean);
+  return paragraphs.map((p, i) => ({
+    id: Math.floor(Math.random() * 100000) + i,
+    documentId: 0, // 由调用方补填
+    index: i + 1,
+    content: p.trim(),
+    tokenCount: Math.ceil(p.length / 2),
+  }));
+}
+
+/** 根据文件名推断文件类型 */
+function getFileType(fileName: string): string {
+  const ext = fileName.split(".").pop()?.toLowerCase() ?? "txt";
+  return ext;
+}
+
+let nextDocId = 1000;
+
+/** 新建文档（用户编写 Markdown 内容） */
+export async function createDocument(
+  kbId: number,
+  input: CreateDocumentInput,
+): Promise<KnowledgeBaseDocument> {
+  const id = nextDocId++;
+  const fileType = getFileType(input.fileName);
+  const chunks = textToChunks(input.content).map((c) => ({ ...c, documentId: id }));
+
+  const doc: KnowledgeBaseDocument = {
+    id,
+    knowledgeBaseId: kbId,
+    fileName: input.fileName,
+    fileType,
+    fileSize: new Blob([input.content]).size,
+    chunkCount: chunks.length,
+    status: 1,
+    createdAt: new Date().toISOString(),
+  };
+
+  // 初始化文档列表
+  if (!MOCK_DOCUMENTS[kbId]) {
+    MOCK_DOCUMENTS[kbId] = [];
+  }
+  MOCK_DOCUMENTS[kbId].unshift(doc);
+  MOCK_DOC_CONTENT[id] = chunks;
+
+  // 更新知识库文档计数
+  const kb = bases.find((b) => b.id === kbId);
+  if (kb) kb.documentCount = MOCK_DOCUMENTS[kbId].length;
+
+  return delay(doc, 300);
+}
+
+/** 上传文档（模拟读取文件内容） */
+export async function uploadDocument(
+  kbId: number,
+  file: { name: string; size: number },
+): Promise<KnowledgeBaseDocument> {
+  const id = nextDocId++;
+  const fileType = getFileType(file.name);
+  // 模拟：根据文件类型生成占位内容
+  const mockContent = `# ${file.name}\n\n文件上传成功，类型：${fileType}，大小：${formatSize(file.size)}\n\n此文件内容为模拟数据，实际内容将在后端解析后返回。`;
+  const chunks = textToChunks(mockContent).map((c) => ({ ...c, documentId: id }));
+
+  const doc: KnowledgeBaseDocument = {
+    id,
+    knowledgeBaseId: kbId,
+    fileName: file.name,
+    fileType,
+    fileSize: file.size,
+    chunkCount: chunks.length,
+    status: 1,
+    createdAt: new Date().toISOString(),
+  };
+
+  if (!MOCK_DOCUMENTS[kbId]) {
+    MOCK_DOCUMENTS[kbId] = [];
+  }
+  MOCK_DOCUMENTS[kbId].unshift(doc);
+  MOCK_DOC_CONTENT[id] = chunks;
+
+  const kb = bases.find((b) => b.id === kbId);
+  if (kb) kb.documentCount = MOCK_DOCUMENTS[kbId].length;
+
+  return delay(doc, 400);
+}
+
+/** 文件大小格式化（mock 内部使用） */
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef, useReducer } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Library, Search } from "lucide-react";
+import { ArrowLeft, Library, Search, FilePlus, Upload } from "lucide-react";
 import { Panel, Group, Separator } from "react-resizable-panels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,8 @@ import { DocumentViewer } from "./document-viewer";
 import { KnowledgeList } from "./knowledge-list";
 import dynamic from "next/dynamic";
 import { CreateDialog } from "./create-dialog";
+import { CreateDocumentDialog } from "./create-document-dialog";
+import { UploadDocumentDialog } from "./upload-document-dialog";
 import {
   getKnowledgeBases,
   getDocuments,
@@ -27,6 +29,8 @@ import {
   createKnowledgeBase,
   updateKnowledgeBase,
   deleteKnowledgeBase,
+  createDocument,
+  uploadDocument,
 } from "@/mock/knowledge-api";
 import type { KnowledgeBase, PageState } from "@/interfaces/knowledge";
 
@@ -57,6 +61,8 @@ const initialState: PageState = {
   editingKb: null,
   deleteDialogOpen: false,
   deleteTarget: null,
+  createDocOpen: false,
+  uploadDocOpen: false,
 };
 
 export function KnowledgePage() {
@@ -81,6 +87,8 @@ export function KnowledgePage() {
     editingKb,
     deleteDialogOpen,
     deleteTarget,
+    createDocOpen,
+    uploadDocOpen,
   } = state;
 
   const allKbsRef = useRef(allKbs);
@@ -134,6 +142,24 @@ export function KnowledgePage() {
       }
     })();
   }, [selectedDoc?.id]);
+
+  // 新建文档
+  const handleCreateDocument = async (data: { fileName: string; content: string }) => {
+    if (!selectedKb) return;
+    await createDocument(selectedKb.id, data);
+    const docs = await getDocuments(selectedKb.id);
+    setState({ documents: docs });
+    await fetchKbList();
+  };
+
+  // 上传文档
+  const handleUploadDocument = async (file: File) => {
+    if (!selectedKb) return;
+    await uploadDocument(selectedKb.id, { name: file.name, size: file.size });
+    const docs = await getDocuments(selectedKb.id);
+    setState({ documents: docs });
+    await fetchKbList();
+  };
 
   // 过滤文档
   const filteredDocuments = useMemo(() => {
@@ -251,7 +277,27 @@ export function KnowledgePage() {
                         className="h-7.5 border-0 bg-transparent pl-8 text-sm shadow-none focus-visible:ring-0"
                       />
                     </div>
-                    <span className="ml-2 shrink-0 text-xs text-muted-foreground">
+                    <div className="ml-2 flex shrink-0 items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-7"
+                        title="新建文档"
+                        onClick={() => setState({ createDocOpen: true })}
+                      >
+                        <FilePlus className="size-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-7"
+                        title="上传文档"
+                        onClick={() => setState({ uploadDocOpen: true })}
+                      >
+                        <Upload className="size-4" />
+                      </Button>
+                    </div>
+                    <span className="ml-1 shrink-0 text-xs text-muted-foreground">
                       {docsLoading ? <Skeleton className="inline-block h-3 w-8" /> : `${documents.length} 个文件`}
                     </span>
                   </div>
@@ -314,6 +360,20 @@ export function KnowledgePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 新建文档对话框 */}
+      <CreateDocumentDialog
+        open={createDocOpen}
+        onOpenChange={(open) => setState({ createDocOpen: open })}
+        onSubmit={handleCreateDocument}
+      />
+
+      {/* 上传文档对话框 */}
+      <UploadDocumentDialog
+        open={uploadDocOpen}
+        onOpenChange={(open) => setState({ uploadDocOpen: open })}
+        onUpload={handleUploadDocument}
+      />
     </div>
   );
 }
