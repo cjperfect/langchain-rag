@@ -5,7 +5,7 @@ import { ThreadEnableMentionsContext } from "@/components/assistant-ui/thread";
 import { atMentionFormatter } from "@/lib/directive-formatter";
 import { LibraryIcon } from "lucide-react";
 import { useState, useEffect, useRef, useContext } from "react";
-import { getKnowledgeBases } from "@/mock/knowledge-api";
+import { getKnowledgeBases } from "@/api/knowledge-api";
 import { knowledgeBaseRegistry } from "@/lib/knowledge-base-registry";
 import type { KnowledgeBase } from "@/interfaces/knowledge";
 

@@ -1,0 +1,82 @@
+// ============================================================================
+// KnowledgeBase — 知识库
+// ============================================================================
+
+model KnowledgeBase {
+  id     Int @id @default(autoincrement())
+  userId Int @map("user_id")
+
+  name        String  @db.VarChar(255)
+  description String? @db.Text
+
+  documentCount Int @default(0) @map("document_count")
+  chunkCount    Int @default(0) @map("chunk_count")
+
+  status Int @default(1) @db.SmallInt
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user      User                 @relation(fields: [userId], references: [id])
+  documents KnowledgeDocument[]
+
+  @@index([userId, updatedAt(sort: Desc)])
+  @@index([status])
+  @@map("knowledge_base")
+}
+
+// ============================================================================
+// KnowledgeDocument — 知识库文档
+// ============================================================================
+
+model KnowledgeDocument {
+  id              Int    @id @default(autoincrement())
+  knowledgeBaseId Int    @map("knowledge_base_id")
+  userId          Int    @map("user_id")
+
+  fileName String @map("file_name") @db.VarChar(500)
+  fileType String @map("file_type") @db.VarChar(20)
+  fileSize BigInt @default(0) @map("file_size")
+  fileUrl  String? @map("file_url") @db.VarChar(1000)
+  content  String? @db.Text
+
+  chunkCount Int @default(0) @map("chunk_count")
+
+  status       Int     @default(1) @db.SmallInt
+  errorMessage String? @map("error_message") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  knowledgeBase KnowledgeBase   @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+  user          User            @relation(fields: [userId], references: [id])
+  chunks        KnowledgeChunk[]
+
+  @@index([knowledgeBaseId, createdAt(sort: Desc)])
+  @@index([userId])
+  @@map("knowledge_document")
+}
+
+// ============================================================================
+// KnowledgeChunk — 文档切片
+// ============================================================================
+
+model KnowledgeChunk {
+  id         Int @id @default(autoincrement())
+  documentId Int @map("document_id")
+  kbId       Int @map("kb_id")
+
+  index      Int
+  content    String @db.Text
+  tokenCount Int    @default(0) @map("token_count")
+
+  metadata Json? @db.JsonB
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  document KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@index([kbId])
+  @@map("knowledge_chunk")
+}

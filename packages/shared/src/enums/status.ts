@@ -102,4 +102,6 @@ export enum ErrorCode {
   DOCUMENT_PARSE_FAILED = 60002,
   /** 知识库检索失败 */
   RAG_RETRIEVAL_FAILED = 60003,
+  /** 知识库不存在 */
+  KNOWLEDGE_BASE_NOT_FOUND = 60004,
 }

@@ -31,7 +31,7 @@ import {
   deleteKnowledgeBase,
   createDocument,
   uploadDocument,
-} from "@/mock/knowledge-api";
+} from "@/api/knowledge-api";
 import type { KnowledgeBase, PageState } from "@/interfaces/knowledge";
 
 const KnowledgeChat = dynamic(() => import("./knowledge-chat").then((m) => ({ default: m.KnowledgeChat })), {
@@ -131,11 +131,11 @@ export function KnowledgePage() {
   // 选中文档 → 加载文档内容
   useEffect(() => {
     const docId = selectedDoc?.id;
-    if (!docId) return;
+    if (!docId || !selectedKb) return;
     (async () => {
       setState({ docContentLoading: true });
       try {
-        const docContent = await getDocumentContent(docId);
+        const docContent = await getDocumentContent(selectedKb.id, docId);
         setState({ docContent });
       } finally {
         setState({ docContentLoading: false });
@@ -155,7 +155,7 @@ export function KnowledgePage() {
   // 上传文档
   const handleUploadDocument = async (file: File) => {
     if (!selectedKb) return;
-    await uploadDocument(selectedKb.id, { name: file.name, size: file.size });
+    await uploadDocument(selectedKb.id, file);
     const docs = await getDocuments(selectedKb.id);
     setState({ documents: docs });
     await fetchKbList();
