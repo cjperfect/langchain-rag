@@ -5,17 +5,10 @@ import relativeTime from "dayjs/plugin/relativeTime";
 import "dayjs/locale/zh-cn";
 import { FileText, File, FileCode, FileJson } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { KnowledgeBaseDocument } from "@/mock/knowledge-api";
+import type { KnowledgeBaseDocument, DocumentListProps } from "@/interfaces/knowledge";
 
 dayjs.extend(relativeTime);
 dayjs.locale("zh-cn");
-
-interface DocumentListProps {
-  documents: KnowledgeBaseDocument[];
-  selectedId: number | null;
-  onSelect: (doc: KnowledgeBaseDocument) => void;
-  loading: boolean;
-}
 
 const typeIcons: Record<string, React.ReactNode> = {
   pdf: <File className="size-4 text-red-500" />,

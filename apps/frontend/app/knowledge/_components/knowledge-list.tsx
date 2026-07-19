@@ -10,17 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import type { KnowledgeBase } from "@/mock/knowledge-api";
-
-interface KnowledgeListProps {
-  items: KnowledgeBase[];
-  selectedId: number | null;
-  loading: boolean;
-  onSelect: (id: number) => void;
-  onCreateClick: () => void;
-  onEdit: (kb: KnowledgeBase) => void;
-  onDelete: (kb: KnowledgeBase) => void;
-}
+import type { KnowledgeListProps } from "@/interfaces/knowledge";
 
 export function KnowledgeList({
   items,

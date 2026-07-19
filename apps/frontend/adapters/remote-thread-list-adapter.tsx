@@ -13,51 +13,7 @@ import { createAssistantStream } from "assistant-stream";
 import type { ExportedMessageRepository } from "@assistant-ui/react";
 import { get, post, patch, del } from "@/lib/api";
 import { useMemo, type FC, type PropsWithChildren } from "react";
-
-// ---------------------------------------------------------------------------
-// assistant-ui 用到的类型（未从 @assistant-ui/react 单独导出，本地声明）
-// ---------------------------------------------------------------------------
-interface RemoteThreadMetadata {
-  readonly status: "regular" | "archived";
-  readonly remoteId: string;
-  readonly externalId?: string | undefined;
-  readonly title?: string | undefined;
-  readonly lastMessageAt?: Date | undefined;
-  readonly custom?: Record<string, unknown> | undefined;
-}
-
-interface RemoteThreadListResponse {
-  threads: RemoteThreadMetadata[];
-  nextCursor?: string | undefined;
-}
-
-// ---------------------------------------------------------------------------
-// 后端返回的原始类型
-// ---------------------------------------------------------------------------
-interface ConversationItem {
-  id: number;
-  title: string | null;
-  status: number; // 1=正常 2=归档
-  messageCount: number;
-  totalTokens: number;
-  branchCount: number;
-  lastMessageAt: string | null;
-  createdAt: string;
-}
-
-/** 后端消息原始类型 */
-interface BackendMessage {
-  id: number;
-  role: "user" | "assistant" | "system";
-  content: string | null;
-  parentId: number | null;
-  rootId: number | null;
-  messageType: string;
-  status: number;
-  createdAt: string;
-  reasoningContent?: string | null;
-  tokenCount?: number;
-}
+import type { RemoteThreadMetadata, RemoteThreadListResponse, ConversationItem, BackendMessage } from "@/interfaces/chat";
 
 // ---------------------------------------------------------------------------
 // HistoryProvider — 点击会话时从后端加载历史消息

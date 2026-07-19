@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, useReducer } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Library, Search } from "lucide-react";
 import { Panel, Group, Separator } from "react-resizable-panels";
@@ -18,44 +18,79 @@ import {
 import { DocumentList } from "./document-list";
 import { DocumentViewer } from "./document-viewer";
 import { KnowledgeList } from "./knowledge-list";
-import { KnowledgeChat } from "./knowledge-chat";
+import dynamic from "next/dynamic";
 import { CreateDialog } from "./create-dialog";
-import { getKnowledgeBases, getDocuments, getChunks, createKnowledgeBase, updateKnowledgeBase, deleteKnowledgeBase } from "@/mock/knowledge-api";
-import type { KnowledgeBase, KnowledgeBaseDocument, DocumentChunk } from "@/mock/knowledge-api";
+import {
+  getKnowledgeBases,
+  getDocuments,
+  getChunks,
+  createKnowledgeBase,
+  updateKnowledgeBase,
+  deleteKnowledgeBase,
+} from "@/mock/knowledge-api";
+import type { KnowledgeBase, PageState } from "@/interfaces/knowledge";
+
+const KnowledgeChat = dynamic(() => import("./knowledge-chat").then((m) => ({ default: m.KnowledgeChat })), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-full items-center justify-center">
+      <Skeleton className="h-8 w-32" />
+    </div>
+  ),
+});
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+const initialState: PageState = {
+  allKbs: [],
+  kbsLoading: true,
+  selectedKb: null,
+  documents: [],
+  docsLoading: false,
+  searchQuery: "",
+  selectedDoc: null,
+  chunks: [],
+  chunksLoading: false,
+  dialogOpen: false,
+  editingKb: null,
+  deleteDialogOpen: false,
+  deleteTarget: null,
+};
 
 export function KnowledgePage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
+  const [state, setState] = useReducer(
+    (prev: PageState, next: Partial<PageState>) => ({ ...prev, ...next }),
+    initialState,
+  );
 
-  // --- 知识库列表 ---
-  const [allKbs, setAllKbs] = useState<KnowledgeBase[]>([]);
-  const [kbsLoading, setKbsLoading] = useState(true);
+  const {
+    allKbs,
+    kbsLoading,
+    selectedKb,
+    documents,
+    docsLoading,
+    searchQuery,
+    selectedDoc,
+    chunks,
+    chunksLoading,
+    dialogOpen,
+    editingKb,
+    deleteDialogOpen,
+    deleteTarget,
+  } = state;
 
-  // --- 选中的知识库 ---
-  const [selectedKb, setSelectedKb] = useState<KnowledgeBase | null>(null);
-
-  // --- 文档 ---
-  const [documents, setDocuments] = useState<KnowledgeBaseDocument[]>([]);
-  const [docsLoading, setDocsLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedDoc, setSelectedDoc] = useState<KnowledgeBaseDocument | null>(null);
-  const [chunks, setChunks] = useState<DocumentChunk[]>([]);
-  const [chunksLoading, setChunksLoading] = useState(false);
-
-  // --- 对话框 ---
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingKb, setEditingKb] = useState<KnowledgeBase | null>(null);
-
-  // --- 删除确认 ---
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<KnowledgeBase | null>(null);
+  const allKbsRef = useRef(allKbs);
+  allKbsRef.current = allKbs;
 
   // 加载知识库列表
   const fetchKbList = useCallback(async () => {
-    setKbsLoading(true);
+    setState({ kbsLoading: true });
     const data = await getKnowledgeBases();
-    setAllKbs(data);
-    setKbsLoading(false);
+    setState({ allKbs: data, kbsLoading: false });
     return data;
   }, []);
 
@@ -67,43 +102,34 @@ export function KnowledgePage() {
     fetchKbList().then((data) => {
       if (data.length === 0) return;
       const first = data[0];
-      setSelectedKb(first);
-      setSelectedDoc(null);
-      setSearchQuery("");
-      setDocsLoading(true);
+      setState({ selectedKb: first, selectedDoc: null, searchQuery: "", docsLoading: true });
       getDocuments(first.id).then((docs) => {
-        setDocuments(docs);
-        setDocsLoading(false);
+        setState({ documents: docs, docsLoading: false });
       });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchKbList]);
 
   // 选中知识库 → 加载文档
-  const handleSelectKb = useCallback(
-    async (id: number) => {
-      const kb = allKbs.find((k) => k.id === id) ?? null;
-      setSelectedKb(kb);
-      setSelectedDoc(null);
-      setSearchQuery("");
-      if (!kb) return;
+  const handleSelectKb = useCallback(async (id: number) => {
+    const kb = allKbsRef.current.find((k) => k.id === id) ?? null;
+    setState({ selectedKb: kb, selectedDoc: null, searchQuery: "" });
+    if (!kb) return;
 
-      setDocsLoading(true);
-      const docs = await getDocuments(id);
-      setDocuments(docs);
-      setDocsLoading(false);
-    },
-    [allKbs],
-  );
+    setState({ docsLoading: true });
+    const docs = await getDocuments(id);
+    setState({ documents: docs, docsLoading: false });
+  }, []);
 
   // 选中文档 → 加载切片
   useEffect(() => {
-    if (!selectedDoc) return;
-    setChunksLoading(true);
-    getChunks(selectedDoc.id)
-      .then(setChunks)
-      .finally(() => setChunksLoading(false));
-  }, [selectedDoc]);
+    const docId = selectedDoc?.id;
+    if (!docId) return;
+    setState({ chunksLoading: true });
+    getChunks(docId)
+      .then((chunks) => setState({ chunks }))
+      .finally(() => setState({ chunksLoading: false }));
+  }, [selectedDoc?.id]);
 
   // 过滤文档
   const filteredDocuments = useMemo(() => {
@@ -120,46 +146,35 @@ export function KnowledgePage() {
       await createKnowledgeBase(data);
     }
     const updated = await fetchKbList();
-    // 自动选中操作的知识库
-    const target = editingKb
-      ? updated.find((k) => k.id === editingKb.id) ?? updated[0]
-      : updated[0];
+    const target = editingKb ? (updated.find((k) => k.id === editingKb.id) ?? updated[0]) : updated[0];
     if (target) {
-      setSelectedKb(target);
-      setDocsLoading(true);
+      setState({ selectedKb: target, docsLoading: true });
       const docs = await getDocuments(target.id);
-      setDocuments(docs);
-      setDocsLoading(false);
+      setState({ documents: docs, docsLoading: false });
     }
-    setEditingKb(null);
+    setState({ editingKb: null });
   };
 
-  const openCreate = () => {
-    setEditingKb(null);
-    setDialogOpen(true);
-  };
-
-  const handleEdit = (kb: KnowledgeBase) => {
-    setEditingKb(kb);
-    setDialogOpen(true);
-  };
+  const openCreate = () => setState({ editingKb: null, dialogOpen: true });
+  const handleEdit = (kb: KnowledgeBase) => setState({ editingKb: kb, dialogOpen: true });
 
   // 删除
-  const handleDeleteClick = (kb: KnowledgeBase) => {
-    setDeleteTarget(kb);
-    setDeleteDialogOpen(true);
-  };
+  const handleDeleteClick = (kb: KnowledgeBase) => setState({ deleteTarget: kb, deleteDialogOpen: true });
 
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
     await deleteKnowledgeBase(deleteTarget.id);
-    setDeleteDialogOpen(false);
-    setDeleteTarget(null);
     // 如果删除的是当前选中的知识库，清除选中
     if (selectedKb?.id === deleteTarget.id) {
-      setSelectedKb(null);
-      setDocuments([]);
-      setSelectedDoc(null);
+      setState({
+        selectedKb: null,
+        documents: [],
+        selectedDoc: null,
+        deleteDialogOpen: false,
+        deleteTarget: null,
+      });
+    } else {
+      setState({ deleteDialogOpen: false, deleteTarget: null });
     }
     await fetchKbList();
   };
@@ -206,7 +221,12 @@ export function KnowledgePage() {
               ) : selectedDoc ? (
                 <div className="flex h-full flex-col border-r">
                   <div className="flex shrink-0 items-center gap-2 border-b px-4 py-2.5">
-                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelectedDoc(null)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => setState({ selectedDoc: null })}
+                    >
                       ← 返回文件列表
                     </Button>
                     <span className="text-xs text-muted-foreground">{selectedKb.name}</span>
@@ -222,7 +242,7 @@ export function KnowledgePage() {
                       <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
                       <Input
                         value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onChange={(e) => setState({ searchQuery: e.target.value })}
                         placeholder="搜索文件…"
                         className="h-7.5 border-0 bg-transparent pl-8 text-sm shadow-none focus-visible:ring-0"
                       />
@@ -235,7 +255,7 @@ export function KnowledgePage() {
                     <DocumentList
                       documents={filteredDocuments}
                       selectedId={null}
-                      onSelect={setSelectedDoc}
+                      onSelect={(doc) => setState({ selectedDoc: doc })}
                       loading={docsLoading}
                     />
                   </div>
@@ -265,15 +285,14 @@ export function KnowledgePage() {
       <CreateDialog
         open={dialogOpen}
         onOpenChange={(open) => {
-          setDialogOpen(open);
-          if (!open) setEditingKb(null);
+          setState({ dialogOpen: open, ...(open ? {} : { editingKb: null }) });
         }}
         onSubmit={handleSave}
         editingKb={editingKb}
       />
 
       {/* 删除确认对话框 */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+      <Dialog open={deleteDialogOpen} onOpenChange={(open) => setState({ deleteDialogOpen: open })}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>确认删除</DialogTitle>
@@ -282,7 +301,7 @@ export function KnowledgePage() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setState({ deleteDialogOpen: false })}>
               取消
             </Button>
             <Button variant="destructive" onClick={handleConfirmDelete} className="gap-2 ml-2">

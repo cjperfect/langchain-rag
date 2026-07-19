@@ -8,7 +8,7 @@ import { LibraryIcon } from "lucide-react";
 import { useState, useEffect, useRef, useContext } from "react";
 import { getKnowledgeBases } from "@/mock/knowledge-api";
 import { knowledgeBaseRegistry } from "@/lib/knowledge-base-registry";
-import type { KnowledgeBase } from "@/mock/knowledge-api";
+import type { KnowledgeBase } from "@/interfaces/knowledge";
 
 export function ComposerInput() {
   const enableMentions = useContext(ThreadEnableMentionsContext);

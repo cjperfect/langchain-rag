@@ -14,14 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { KnowledgeBase } from "@/mock/knowledge-api";
-
-interface CreateDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSubmit: (data: { name: string; description?: string }) => Promise<void>;
-  editingKb?: KnowledgeBase | null;
-}
+import type { CreateDialogProps } from "@/interfaces/knowledge";
 
 export function CreateDialog({ open, onOpenChange, onSubmit, editingKb }: CreateDialogProps) {
   const [name, setName] = useState("");
@@ -41,7 +34,8 @@ export function CreateDialog({ open, onOpenChange, onSubmit, editingKb }: Create
       setDescription("");
     }
     setError("");
-  }, [editingKb, open]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingKb?.id, open]);
 
   const handleSubmit = async () => {
     const trimmed = name.trim();
@@ -106,7 +100,7 @@ export function CreateDialog({ open, onOpenChange, onSubmit, editingKb }: Create
               maxLength={500}
             />
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error ? <p className="text-sm text-destructive">{error}</p> : null}
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">
@@ -114,7 +108,7 @@ export function CreateDialog({ open, onOpenChange, onSubmit, editingKb }: Create
             取消
           </Button>
           <Button onClick={handleSubmit} disabled={loading} className="gap-2 ml-2">
-            {loading && <Loader2 className="size-4 animate-spin" />}
+            {loading ? <Loader2 className="size-4 animate-spin" /> : null}
             {isEditing ? "保存" : "创建"}
           </Button>
         </DialogFooter>

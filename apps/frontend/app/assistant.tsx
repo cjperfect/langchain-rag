@@ -6,13 +6,18 @@ import {
   useRemoteThreadListRuntime,
   WebSpeechDictationAdapter,
 } from "@assistant-ui/react";
+import dynamic from "next/dynamic";
 import { Thread } from "@/components/assistant-ui/thread";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { ThreadListSidebar } from "@/components/assistant-ui/threadlist-sidebar";
 import { Separator } from "@/components/ui/separator";
-import { DevToolsModal } from "@assistant-ui/react-devtools";
+import { ThreadListSidebar } from "@/components/assistant-ui/threadlist-sidebar";
 import { chatAdapter } from "@/adapters/chat-adapter";
 import { remoteThreadListAdapter } from "@/adapters/remote-thread-list-adapter";
+
+const DevToolsModal = dynamic(
+  () => import("@assistant-ui/react-devtools").then((m) => ({ default: m.DevToolsModal })),
+  { ssr: false },
+);
 
 // 避免每次 render 重建
 const speechAdapter = new WebSpeechDictationAdapter();
@@ -28,7 +33,7 @@ export const Assistant = () => {
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <DevToolsModal />
+      {process.env.NODE_ENV === "development" ? <DevToolsModal /> : null}
       <SidebarProvider>
         <div className="flex h-dvh w-full pr-0.5">
           <ThreadListSidebar />

@@ -5,47 +5,24 @@
 // import { get, post, patch, del } from "./api";
 
 // ============================================================================
-// 类型定义
+// 类型定义（从 interfaces 统一导出）
 // ============================================================================
 
-export interface KnowledgeBase {
-  id: number;
-  name: string;
-  description?: string;
-  documentCount: number;
-  status: number; // 1=正常 2=归档 3=删除
-  createdAt: string;
-  updatedAt: string;
-}
+import type {
+  KnowledgeBase,
+  CreateKnowledgeBaseInput,
+  UpdateKnowledgeBaseInput,
+  KnowledgeBaseDocument,
+  DocumentChunk,
+} from "@/interfaces/knowledge";
 
-export interface CreateKnowledgeBaseInput {
-  name: string;
-  description?: string;
-}
-
-export interface UpdateKnowledgeBaseInput {
-  name?: string;
-  description?: string;
-}
-
-export interface KnowledgeBaseDocument {
-  id: number;
-  knowledgeBaseId: number;
-  fileName: string;
-  fileType: string;
-  fileSize: number;
-  chunkCount: number;
-  status: number;
-  createdAt: string;
-}
-
-export interface DocumentChunk {
-  id: number;
-  documentId: number;
-  index: number;
-  content: string;
-  tokenCount: number;
-}
+export type {
+  KnowledgeBase,
+  CreateKnowledgeBaseInput,
+  UpdateKnowledgeBaseInput,
+  KnowledgeBaseDocument,
+  DocumentChunk,
+};
 
 // ============================================================================
 // Mock 数据

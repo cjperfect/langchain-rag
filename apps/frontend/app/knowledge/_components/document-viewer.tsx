@@ -2,13 +2,7 @@
 
 import { FileText } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { DocumentChunk } from "@/mock/knowledge-api";
-
-interface DocumentViewerProps {
-  chunks: DocumentChunk[];
-  fileName: string | null;
-  loading: boolean;
-}
+import type { DocumentViewerProps } from "@/interfaces/knowledge";
 
 export function DocumentViewer({ chunks, fileName, loading }: DocumentViewerProps) {
   if (!fileName) {

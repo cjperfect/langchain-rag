@@ -12,16 +12,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Library, History, Plus, MessageSquare } from "lucide-react";
+import type { KbConversation, KnowledgeChatProps } from "@/interfaces/knowledge";
 
 // ---------------------------------------------------------------------------
 // 会话记录 mock（按知识库 ID 分组）
 // ---------------------------------------------------------------------------
-
-interface KbConversation {
-  id: string;
-  title: string;
-  updatedAt: Date;
-}
 
 const mockConversations: Record<number, KbConversation[]> = {};
 
@@ -39,11 +34,6 @@ function getOrCreateConversations(kbId: number): KbConversation[] {
 }
 
 // ---------------------------------------------------------------------------
-
-interface KnowledgeChatProps {
-  knowledgeBaseId: number;
-  knowledgeBaseName: string;
-}
 
 const KnowledgeChatWelcome: FC<{ kbName: string }> = ({ kbName }) => (
   <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-16 text-center">
@@ -113,7 +103,7 @@ export function KnowledgeChat({ knowledgeBaseId, knowledgeBaseName }: KnowledgeC
                 >
                   <MessageSquare className="size-3.5 shrink-0" />
                   <span className="flex-1 truncate text-sm">{conv.title}</span>
-                  {conv.id === activeConvId && <span className="size-1.5 shrink-0 rounded-full bg-primary" />}
+                  {conv.id === activeConvId ? <span className="size-1.5 shrink-0 rounded-full bg-primary" /> : null}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
