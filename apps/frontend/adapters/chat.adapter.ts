@@ -78,6 +78,21 @@ async function* streamChat(body: Record<string, unknown>) {
           yield { content: buildParts() };
           break;
         }
+        case "knowledge_search": {
+          // 优先用后端下发的 kbNames，回退到本地 registry 查询
+          const kbNames =
+            (d.kbNames as string[])?.length
+              ? (d.kbNames as string[])
+              : ((d.kbIds ?? []) as number[])
+                  .map((id: number) => knowledgeBaseRegistry.getName(id))
+                  .filter(Boolean);
+          // 在助手回复正文顶部显示知识来源（仅首次，避免重复插入）
+          if (!fullText && kbNames.length > 0) {
+            fullText = `> 📚 知识来源：**${kbNames.join("、")}**\n\n`;
+          }
+          yield { content: buildParts() };
+          break;
+        }
         case "message":
           if (d.content) {
             fullText += d.content;
@@ -91,6 +106,7 @@ async function* streamChat(body: Record<string, unknown>) {
               custom: {
                 request_message_id: d.request_message_id,
                 response_message_id: d.response_message_id,
+                rag_sources: d.rag_sources ?? [],
               },
             },
           };
@@ -163,7 +179,7 @@ export function createKnowledgeChatAdapter(
 
       const body: Record<string, unknown> = {
         prompt: userMessage,
-        knowledge_id: knowledgeBaseId,
+        knowledge_ids: [knowledgeBaseId],
       };
       if (conversationId) body.chat_session_id = conversationId;
       if (parentMessageId) body.parent_message_id = parentMessageId;

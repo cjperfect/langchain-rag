@@ -107,7 +107,7 @@ export class KnowledgeService {
 
   /** 新建文档：ai-engine 负责切片 + 向量化，后端负责 DB 记录 */
   async createDocument(kbId: number, userId: number, dto: CreateDocumentDto) {
-    await this.get(kbId);
+    const kb = await this.get(kbId);
 
     const fileType = getFileType(dto.fileName);
     const fileSize = Buffer.byteLength(dto.content, "utf-8");
@@ -125,11 +125,16 @@ export class KnowledgeService {
       },
     });
 
-    // ai-engine 全权处理切片 + 向量化
-    const chunks = await ragService.indexDocument(kbId, doc.id, dto.content).catch((err) => {
-      this.logger.error(`文档 ${doc.id} 向量索引失败`, err);
-      return [];
-    });
+    // ai-engine 全权处理切片 + 向量化（存入 KB 名称 + 文档名，便于检索时展示来源）
+    const chunks = await ragService
+      .indexDocument(kbId, doc.id, dto.content, {
+        kbName: kb.name,
+        documentName: dto.fileName,
+      })
+      .catch((err) => {
+        this.logger.error(`文档 ${doc.id} 向量索引失败`, err);
+        return [];
+      });
 
     // 写入切片记录
     if (chunks.length > 0) {
@@ -200,6 +205,9 @@ export class KnowledgeService {
         fileName: file.fileName,
         content: content.trim() || file.buffer.toString("utf-8"),
       });
+    } catch (err) {
+      this.logger.error(`文件上传失败: ${file.fileName}`, err);
+      throw err;
     } finally {
       // 清理临时文件
       try {
@@ -240,11 +248,20 @@ export class KnowledgeService {
       // 删除旧切片记录
       await this.prisma.knowledgeChunk.deleteMany({ where: { documentId: docId } });
 
+      // 获取 KB 名称用于向量 metadata
+      const kb = await this.get(doc.knowledgeBaseId);
+      const fileName = dto.fileName ?? doc.fileName;
+
       // ai-engine 全权处理：删旧向量 + 重新切片 + 向量化
-      const chunks = await ragService.reindexDocument(docId, doc.knowledgeBaseId, dto.content).catch((err) => {
-        this.logger.error(`文档 ${docId} 重建索引失败`, err);
-        return [];
-      });
+      const chunks = await ragService
+        .reindexDocument(docId, doc.knowledgeBaseId, dto.content, {
+          kbName: kb.name,
+          documentName: fileName,
+        })
+        .catch((err) => {
+          this.logger.error(`文档 ${docId} 重建索引失败`, err);
+          return [];
+        });
 
       // 写入新切片记录
       if (chunks.length > 0) {

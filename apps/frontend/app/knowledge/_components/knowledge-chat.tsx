@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FC } from "react";
+import { useMemo, useState, useEffect, type FC } from "react";
 import {
   AssistantRuntimeProvider,
   useLocalRuntime,
@@ -13,6 +13,7 @@ import { createRemoteThreadListAdapter } from "@/adapters/remote-thread-list.ada
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Library, History } from "lucide-react";
+import { knowledgeBaseRegistry } from "@/lib/knowledge-base-registry";
 import type { KnowledgeChatProps } from "@/interfaces/knowledge";
 
 // ---------------------------------------------------------------------------
@@ -51,6 +52,11 @@ export function KnowledgeChat({ knowledgeBaseId, knowledgeBaseName }: KnowledgeC
     () => createKnowledgeChatAdapter(knowledgeBaseId, knowledgeBaseName),
     [knowledgeBaseId, knowledgeBaseName],
   );
+
+  // 注册当前知识库到全局 registry，便于 knowledge_search 事件展示来源名称
+  useEffect(() => {
+    knowledgeBaseRegistry.setAll([{ id: knowledgeBaseId, name: knowledgeBaseName }]);
+  }, [knowledgeBaseId, knowledgeBaseName]);
 
   const runtime = useRemoteThreadListRuntime({
     adapter: threadListAdapter,

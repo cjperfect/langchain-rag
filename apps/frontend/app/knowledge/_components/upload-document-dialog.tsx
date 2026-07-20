@@ -83,7 +83,7 @@ export function UploadDocumentDialog({ open, onOpenChange, onUpload }: UploadDoc
         <DialogHeader>
           <DialogTitle>上传文档</DialogTitle>
           <DialogDescription>
-            支持 PDF、Markdown、Word、TXT 等格式，单个文件最大 50MB
+            支持 PDF、Markdown、Word、TXT、CSV、代码文件等格式，单个文件最大 50MB
           </DialogDescription>
         </DialogHeader>
 
@@ -131,14 +131,14 @@ export function UploadDocumentDialog({ open, onOpenChange, onUpload }: UploadDoc
               <div className="text-center">
                 <p className="text-sm font-medium">拖拽文件到此处或点击选择</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  PDF · MD · DOCX · TXT · 代码文件
+                  PDF · MD · DOCX · TXT · CSV · 代码文件
                 </p>
               </div>
               <input
                 ref={inputRef}
                 type="file"
                 className="hidden"
-                accept=".pdf,.md,.docx,.txt,.ts,.tsx,.js,.jsx,.py,.sql,.json,.yml,.yaml,.pptx"
+                accept=".pdf,.md,.docx,.txt,.csv,.ts,.tsx,.js,.jsx,.py,.sql,.json,.yml,.yaml,.pptx"
                 onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
               />
             </div>

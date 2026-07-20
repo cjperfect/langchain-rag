@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { ConversationService } from "../conversation/conversation.service";
 import { MessageService } from "../message/message.service";
+import { PrismaService } from "../prisma/prisma.service";
 import { AiEngine, ragService } from "@langchain-rag/ai-engine";
 import type { RagSearchResult } from "@langchain-rag/ai-engine";
 import { BusinessException } from "../common/exceptions/business.exception";
@@ -21,6 +22,7 @@ export class ChatService {
   constructor(
     private readonly conversationService: ConversationService,
     private readonly messageService: MessageService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async *streamChat(userId: number, chatDto: ChatDto): AsyncGenerator<ChatStreamEvent> {
@@ -48,11 +50,39 @@ export class ChatService {
       rootId: chatDto.parent_message_id,
     });
 
-    // 5. RAG 检索 + 组装上下文
+    // 5. RAG 检索 + 组装上下文（kbIds 合并 knowledge_ids 和 knowledge_id 两个来源）
+    const kbIds = chatDto.knowledge_ids?.length
+      ? chatDto.knowledge_ids
+      : chatDto.knowledge_id != null
+        ? [chatDto.knowledge_id]
+        : [];
     const { enhancedPrompt, retrievedDocs } = await this.buildRagContext(
       chatDto.prompt,
-      chatDto.knowledge_ids,
+      kbIds,
     );
+
+    // 从数据库查询知识库名称（向量 metadata 可能没有，旧数据兼容）
+    const uniqueKbIds = [...new Set(retrievedDocs.map((d) => d.kbId))];
+    const kbs = uniqueKbIds.length > 0
+      ? await this.prisma.knowledgeBase.findMany({
+          where: { id: { in: uniqueKbIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const idToName = new Map(kbs.map((k) => [k.id, k.name]));
+
+    // 向客户端通知 RAG 检索结果（知识来源名称 + 结果数）
+    if (retrievedDocs.length > 0) {
+      yield {
+        event: "knowledge_search",
+        data: {
+          query: chatDto.prompt,
+          kbIds,
+          results: `共检索到 ${retrievedDocs.length} 条相关文档片段`,
+          kbNames: uniqueKbIds.map((id) => idToName.get(id) ?? `知识库#${id}`),
+        },
+      };
+    }
 
     // 6. 调用 AI 引擎，流式输出（模型每消息可选切换）
     const startTime = Date.now();
@@ -81,6 +111,15 @@ export class ChatService {
               event: "tool_end",
               data: { toolName: event.name, result: event.result },
             };
+            break;
+          case "knowledge_search":
+            // 只转发 agent 自己的 knowledge_search（pre-search 已在前面发过）
+            if (event.query === "") {
+              yield {
+                event: "knowledge_search",
+                data: { query: event.query, kbIds: event.kbIds, kbNames: event.kbNames, results: event.results },
+              };
+            }
             break;
           case "token":
             fullContent += event.content;
@@ -144,12 +183,19 @@ export class ChatService {
     // 9. 更新当前消息位置
     await this.messageService.switchBranch(conversationId, Number(assistantMsg.id));
 
-    // 结束事件：返回本轮问答的消息 ID，前端用于编辑/重新生成等分支操作
+    // 结束事件：返回本轮问答的消息 ID + RAG 来源，前端用于编辑/重新生成 + 展示知识来源
     yield {
       event: "done",
       data: {
         request_message_id: Number(userMsg.id),
         response_message_id: Number(assistantMsg.id),
+        rag_sources: retrievedDocs.map((d) => ({
+          kbId: d.kbId,
+          kbName: idToName.get(d.kbId) ?? d.kbName ?? `知识库#${d.kbId}`,
+          documentId: d.documentId,
+          documentName: d.documentName ?? `文档#${d.documentId}`,
+          score: d.score,
+        })),
       },
     };
   }
@@ -171,7 +217,7 @@ export class ChatService {
     const ragContext = retrievedDocs
       .map(
         (d, i) =>
-          `<document index="${i + 1}" chunk_id="${d.documentId}" score="${d.score.toFixed(4)}">\n${d.content}\n</document>`,
+          `<document index="${i + 1}" source="${d.kbName ?? `知识库#${d.kbId}`}/${d.documentName ?? `文档#${d.documentId}`}" score="${d.score.toFixed(4)}">\n${d.content}\n</document>`,
       )
       .join("\n\n");
 

@@ -50,6 +50,7 @@ import {
 } from "lucide-react";
 import { createContext, useContext, type ComponentType, type FC, type PropsWithChildren } from "react";
 import { DirectiveText } from "@/components/assistant-ui/directive-text";
+import { KnowledgeSources } from "@/components/assistant-ui/knowledge-sources";
 import { ComposerInput } from "./composeInput";
 import { ModelSelector } from "./model-selector";
 
@@ -308,6 +309,7 @@ const AssistantMessage: FC = () => {
       className="fade-in slide-in-from-bottom-1 animate-in relative -mb-7.5 pb-7.5 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
     >
       <div data-slot="aui_assistant-message-content" className="text-foreground px-2 leading-relaxed wrap-break-word">
+        <KnowledgeSources />
         <MessagePrimitive.GroupedParts
           groupBy={groupPartByType({
             reasoning: ["group-chainOfThought", "group-reasoning"],
