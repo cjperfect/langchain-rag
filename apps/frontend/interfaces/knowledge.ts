@@ -146,6 +146,11 @@ export interface DocumentListProps {
   selectedId: number | null;
   /** 选中文档回调 */
   onSelect: (doc: KnowledgeBaseDocument) => void;
+  /** 删除文档回调 */
+  onDelete: (doc: KnowledgeBaseDocument) => void;
+  /** 是否加载中 */
+  loading: boolean;
+}
   /** 是否加载中 */
   loading: boolean;
 }

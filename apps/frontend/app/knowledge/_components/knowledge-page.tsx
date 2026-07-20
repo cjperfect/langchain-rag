@@ -31,6 +31,7 @@ import {
   deleteKnowledgeBase,
   createDocument,
   uploadDocument,
+  deleteDocument,
 } from "@/api/knowledge-api";
 import type { KnowledgeBase, PageState } from "@/interfaces/knowledge";
 
@@ -328,6 +329,11 @@ export function KnowledgePage() {
                       documents={filteredDocuments}
                       selectedId={null}
                       onSelect={(doc) => setState({ selectedDoc: doc })}
+                      onDelete={async (doc) => {
+                        await deleteDocument(selectedKb!.id, doc.id);
+                        const docs = await getDocuments(selectedKb!.id);
+                        setState({ documents: docs });
+                      }}
                       loading={docsLoading}
                     />
                   </div>
