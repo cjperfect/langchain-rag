@@ -3,6 +3,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { Exceptions } from "../common/exceptions/business.exception";
 import { CommonStatus } from "@langchain-rag/shared";
 import type { SendMessageDto, EditMessageDto } from "./dto/message.dto";
+import type { RagSearchResult } from "@langchain-rag/ai-engine";
 
 @Injectable()
 export class MessageService {
@@ -248,6 +249,22 @@ export class MessageService {
   }) {
     return this.prisma.chatContext.create({
       data: params as any,
+    });
+  }
+
+  /** 保存 RAG 检索引用 */
+  async saveRagReferences(
+    messageId: number,
+    references: RagSearchResult[],
+  ): Promise<void> {
+    await this.prisma.chatRagReference.createMany({
+      data: references.map((ref) => ({
+        messageId,
+        documentId: ref.documentId,
+        chunkId: 0,
+        content: ref.content.slice(0, 500),
+        score: ref.score,
+      })),
     });
   }
 

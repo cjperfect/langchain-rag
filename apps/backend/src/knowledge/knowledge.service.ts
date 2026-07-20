@@ -1,27 +1,17 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { writeFileSync, unlinkSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { PrismaService } from "../prisma/prisma.service";
 import { Exceptions } from "../common/exceptions/business.exception";
 import { CommonStatus } from "@langchain-rag/shared";
-import { loadPdf, loadCsv, loadText, loadMarkdown } from "@langchain-rag/ai-engine";
+import { loadPdf, loadCsv, loadText, loadMarkdown, ragService } from "@langchain-rag/ai-engine";
 import type {
   CreateKnowledgeBaseDto,
   UpdateKnowledgeBaseDto,
   CreateDocumentDto,
   UpdateDocumentDto,
 } from "./dto/knowledge.dto";
-
-/**
- * 将文本按段落切分为简单切片（不调用 AI，仅按空行分隔）
- */
-function splitTextToChunks(text: string): string[] {
-  return text
-    .split(/\n\n+/)
-    .map((p) => p.trim())
-    .filter(Boolean);
-}
 
 /**
  * 根据文件名推断文件类型
@@ -33,6 +23,8 @@ function getFileType(fileName: string): string {
 
 @Injectable()
 export class KnowledgeService {
+  private readonly logger = new Logger(KnowledgeService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ==========================================================================
@@ -104,17 +96,20 @@ export class KnowledgeService {
   async getDocuments(kbId: number, userId: number) {
     await this.get(kbId);
     return this.prisma.knowledgeDocument.findMany({
-      where: { knowledgeBaseId: kbId, userId, status: { in: [CommonStatus.NORMAL, CommonStatus.ARCHIVED] } },
+      where: {
+        knowledgeBaseId: kbId,
+        userId,
+        status: { in: [CommonStatus.NORMAL, CommonStatus.ARCHIVED] },
+      },
       orderBy: { createdAt: "desc" },
     });
   }
 
-  /** 新建文档（Markdown 内容）+ 简单切片 */
+  /** 新建文档：ai-engine 负责切片 + 向量化，后端负责 DB 记录 */
   async createDocument(kbId: number, userId: number, dto: CreateDocumentDto) {
     await this.get(kbId);
 
     const fileType = getFileType(dto.fileName);
-    const chunks = splitTextToChunks(dto.content);
     const fileSize = Buffer.byteLength(dto.content, "utf-8");
 
     const doc = await this.prisma.knowledgeDocument.create({
@@ -125,25 +120,31 @@ export class KnowledgeService {
         fileType,
         fileSize,
         content: dto.content,
-        chunkCount: chunks.length,
+        chunkCount: 0,
         status: CommonStatus.NORMAL,
       },
     });
 
-    // 写入切片
+    // ai-engine 全权处理切片 + 向量化
+    const chunks = await ragService.indexDocument(kbId, doc.id, dto.content).catch((err) => {
+      this.logger.error(`文档 ${doc.id} 向量索引失败`, err);
+      return [];
+    });
+
+    // 写入切片记录
     if (chunks.length > 0) {
       await this.prisma.knowledgeChunk.createMany({
-        data: chunks.map((content, i) => ({
+        data: chunks.map((c) => ({
           documentId: doc.id,
           kbId,
-          index: i + 1,
-          content,
-          tokenCount: Math.ceil(content.length / 2),
+          index: c.index,
+          content: c.content,
+          tokenCount: c.tokenCount,
         })),
       });
     }
 
-    // 更新知识库文档计数
+    // 更新计数
     await this.prisma.knowledgeBase.update({
       where: { id: kbId },
       data: {
@@ -152,7 +153,10 @@ export class KnowledgeService {
       },
     });
 
-    return doc;
+    return this.prisma.knowledgeDocument.update({
+      where: { id: doc.id },
+      data: { chunkCount: chunks.length },
+    });
   }
 
   /** 获取文档切片 */
@@ -222,7 +226,7 @@ export class KnowledgeService {
     }
   }
 
-  /** 更新文档内容（重新切片） */
+  /** 更新文档内容：ai-engine 负责重建索引 */
   async updateDocument(docId: number, userId: number, dto: UpdateDocumentDto) {
     const doc = await this.prisma.knowledgeDocument.findUnique({ where: { id: docId } });
     if (!doc) throw Exceptions.notFound("文档不存在");
@@ -231,21 +235,26 @@ export class KnowledgeService {
     if (dto.fileName !== undefined) updateData.fileName = dto.fileName;
 
     if (dto.content !== undefined) {
-      const chunks = splitTextToChunks(dto.content);
       const fileSize = Buffer.byteLength(dto.content, "utf-8");
 
-      // 删除旧切片
+      // 删除旧切片记录
       await this.prisma.knowledgeChunk.deleteMany({ where: { documentId: docId } });
 
-      // 写入新切片
+      // ai-engine 全权处理：删旧向量 + 重新切片 + 向量化
+      const chunks = await ragService.reindexDocument(docId, doc.knowledgeBaseId, dto.content).catch((err) => {
+        this.logger.error(`文档 ${docId} 重建索引失败`, err);
+        return [];
+      });
+
+      // 写入新切片记录
       if (chunks.length > 0) {
         await this.prisma.knowledgeChunk.createMany({
-          data: chunks.map((content, index) => ({
+          data: chunks.map((c) => ({
             documentId: docId,
             kbId: doc.knowledgeBaseId,
-            index,
-            content,
-            tokenCount: Math.ceil(content.length / 3),
+            index: c.index,
+            content: c.content,
+            tokenCount: c.tokenCount,
           })),
         });
       }
@@ -254,12 +263,9 @@ export class KnowledgeService {
       updateData.fileSize = fileSize;
       updateData.chunkCount = chunks.length;
 
-      // 更新知识库切片计数
       await this.prisma.knowledgeBase.update({
         where: { id: doc.knowledgeBaseId },
-        data: {
-          chunkCount: { increment: chunks.length - doc.chunkCount },
-        },
+        data: { chunkCount: { increment: chunks.length - doc.chunkCount } },
       });
     }
 
@@ -274,7 +280,8 @@ export class KnowledgeService {
     const doc = await this.prisma.knowledgeDocument.findUnique({ where: { id: docId } });
     if (!doc) throw Exceptions.notFound("文档不存在");
 
-    // 切片没有 status 字段，直接物理删除（文档恢复后需重新解析）
+    // 清除向量再删除切片
+    await ragService.deleteByDocumentId(docId);
     await this.prisma.knowledgeChunk.deleteMany({ where: { documentId: docId } });
 
     // 更新知识库计数
@@ -291,4 +298,5 @@ export class KnowledgeService {
       data: { status: CommonStatus.DELETED },
     });
   }
+
 }

@@ -342,10 +342,150 @@ async function loadText(filePath) {
 async function loadMarkdown(filePath) {
   return loadText(filePath);
 }
+
+// src/embeddings/embedding.service.ts
+import { OpenAIEmbeddings } from "@langchain/openai";
+var EMBEDDING_BASE_URL = process.env.EMBEDDING_BASE_URL ?? "http://localhost:11434/v1";
+var EMBEDDING_MODEL = process.env.EMBEDDING_MODEL ?? "qwen3-embedding:0.6b";
+var EMBEDDING_API_KEY = process.env.EMBEDDING_API_KEY ?? "ollama";
+var baseEmbeddingConfig = {
+  apiKey: EMBEDDING_API_KEY,
+  model: EMBEDDING_MODEL,
+  configuration: { baseURL: EMBEDDING_BASE_URL },
+  batchSize: 32,
+  stripNewLines: false
+};
+function createEmbeddings(modelName) {
+  return new OpenAIEmbeddings({
+    ...baseEmbeddingConfig,
+    model: modelName ?? EMBEDDING_MODEL
+  });
+}
+var defaultEmbeddings = createEmbeddings();
+
+// src/rag/rag.service.ts
+import { PGVectorStore } from "@langchain/community/vectorstores/pgvector";
+import { Document as Document2 } from "@langchain/core/documents";
+import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
+var TABLE_NAME = "langchain_pg_embedding";
+var EMBEDDING_DIMENSIONS = Number(process.env.EMBEDDING_DIMENSIONS ?? "1024");
+var RagService = class {
+  vectorStore = null;
+  embeddings;
+  constructor(embeddings) {
+    this.embeddings = embeddings ?? defaultEmbeddings;
+  }
+  /** 初始化 PGVectorStore（延迟初始化，避免模块加载时立即连接 DB） */
+  async getStore() {
+    if (this.vectorStore) return this.vectorStore;
+    const config = {
+      postgresConnectionOptions: {
+        connectionString: process.env.DATABASE_URL
+      },
+      tableName: TABLE_NAME,
+      columns: {
+        idColumnName: "id",
+        contentColumnName: "content",
+        metadataColumnName: "metadata",
+        vectorColumnName: "embedding"
+      },
+      distanceStrategy: "cosine",
+      scoreNormalization: "similarity"
+    };
+    this.vectorStore = await PGVectorStore.initialize(this.embeddings, {
+      ...config,
+      dimensions: EMBEDDING_DIMENSIONS
+    });
+    return this.vectorStore;
+  }
+  /**
+   * 索引文档：切片 + 向量化，返回切片数据供后端写 DB
+   *
+   * @param kbId 知识库 ID
+   * @param documentId 文档 ID
+   * @param content 文档全文
+   * @returns 切片列表（含序号和 token 估算）
+   */
+  async indexDocument(kbId, documentId, content) {
+    const texts = await splitTextToChunks(content);
+    if (texts.length === 0) return [];
+    const store = await this.getStore();
+    const docs = texts.map(
+      (text, i) => new Document2({
+        pageContent: text,
+        metadata: {
+          documentId,
+          kbId,
+          chunkIndex: i + 1
+        }
+      })
+    );
+    await store.addDocuments(docs);
+    return texts.map((text, i) => ({
+      content: text,
+      index: i + 1,
+      tokenCount: Math.ceil(text.length / 2)
+    }));
+  }
+  /**
+   * 重建索引：删除旧向量 → 重新切片 → 重新向量化
+   */
+  async reindexDocument(documentId, kbId, content) {
+    await this.deleteByDocumentId(documentId);
+    return this.indexDocument(kbId, documentId, content);
+  }
+  /**
+   * 向量相似度检索
+   *
+   * @param query 用户问题
+   * @param options.kbIds 限制在指定知识库
+   * @param options.k top-K
+   */
+  async search(query, options = {}) {
+    const { kbIds, k = 5 } = options;
+    const store = await this.getStore();
+    const filter = kbIds && kbIds.length > 0 ? { kbId: { in: kbIds } } : void 0;
+    const results = await store.similaritySearchWithScore(query, k, filter);
+    return results.map(([doc, score]) => {
+      const metadata = doc.metadata;
+      return {
+        content: doc.pageContent,
+        documentId: metadata.documentId,
+        kbId: metadata.kbId,
+        score
+        // PGVectorStore with scoreNormalization="similarity" already returns similarity
+      };
+    });
+  }
+  /**
+   * 删除某个文档的所有向量
+   *
+   * PGVectorStore 通过 metadata 过滤删除
+   */
+  async deleteByDocumentId(documentId) {
+    const store = await this.getStore();
+    await store.delete({ filter: { documentId } });
+  }
+};
+async function splitTextToChunks(text) {
+  const splitter = new RecursiveCharacterTextSplitter({
+    chunkSize: 500,
+    chunkOverlap: 50,
+    separators: ["\n\n", "\n", "\u3002", "\uFF01", "\uFF1F", "\uFF1B", "\uFF0C", " ", ""]
+  });
+  const docs = await splitter.createDocuments([text]);
+  return docs.map((d) => d.pageContent).filter(Boolean);
+}
+var ragService = new RagService();
 export {
   AiEngine,
+  RagService,
+  createEmbeddings,
+  defaultEmbeddings,
   loadCsv,
   loadMarkdown,
   loadPdf,
-  loadText
+  loadText,
+  ragService,
+  splitTextToChunks
 };

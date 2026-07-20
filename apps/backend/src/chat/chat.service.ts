@@ -1,7 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import { ConversationService } from "../conversation/conversation.service";
 import { MessageService } from "../message/message.service";
-import { AiEngine } from "@langchain-rag/ai-engine";
+import { AiEngine, ragService } from "@langchain-rag/ai-engine";
+import type { RagSearchResult } from "@langchain-rag/ai-engine";
 import { BusinessException } from "../common/exceptions/business.exception";
 import { ErrorCode } from "@langchain-rag/shared";
 import type { ChatDto, ChatStreamEvent } from "./dto/chat.dto";
@@ -22,12 +23,6 @@ export class ChatService {
     private readonly messageService: MessageService,
   ) {}
 
-  /**
-   * 聊天：
-   * 1. 新增一个会话
-   * 2. 获取会话id
-   * 3. yield给前端，下次发消息的时候带上
-   */
   async *streamChat(userId: number, chatDto: ChatDto): AsyncGenerator<ChatStreamEvent> {
     // 1. 获取会话（前端 initialize 已创建）
     const conversationId = chatDto.chat_session_id;
@@ -35,11 +30,11 @@ export class ChatService {
       throw new BusinessException(ErrorCode.BAD_REQUEST, "未初始化会话");
     }
 
-    const conv = await this.conversationService.get(Number(conversationId));
-
+    const conv = await this.conversationService.get(conversationId);
+    // 会话id传给前端，后续对话带过来
     yield { event: "session", data: { session_id: conversationId } };
 
-    // 2. 确定父消息 ID（前端传了 parent_message_id 则用它，否则用 currentMessageId）
+    // 确定父消息 ID（前端传了 parent_message_id 则用它，否则用 currentMessageId）
     const parentMessageId = chatDto.parent_message_id
       ? chatDto.parent_message_id
       : Number(conv.currentMessageId);
@@ -53,7 +48,13 @@ export class ChatService {
       rootId: chatDto.parent_message_id,
     });
 
-    // 4. 调用 AI 引擎，流式输出（模型每消息可选切换）
+    // 5. RAG 检索 + 组装上下文
+    const { enhancedPrompt, retrievedDocs } = await this.buildRagContext(
+      chatDto.prompt,
+      chatDto.knowledge_ids,
+    );
+
+    // 6. 调用 AI 引擎，流式输出（模型每消息可选切换）
     const startTime = Date.now();
     let fullContent = "";
     let fullReasoning = "";
@@ -61,7 +62,7 @@ export class ChatService {
     let outputTokens = 0;
 
     try {
-      const stream = this.aiEngine.streamEvents(chatDto.prompt, {
+      const stream = this.aiEngine.streamEvents(enhancedPrompt, {
         history: ctx.messages as ContextMessage[],
         model: chatDto.model,
       });
@@ -88,7 +89,7 @@ export class ChatService {
         }
       }
 
-      inputTokens = Math.ceil(chatDto.prompt.length / 4);
+      inputTokens = Math.ceil(enhancedPrompt.length / 4);
       outputTokens = Math.ceil((fullContent + fullReasoning).length / 4);
     } catch (error) {
       yield { event: "error", data: { error: String(error) } };
@@ -97,7 +98,7 @@ export class ChatService {
 
     const latency = Date.now() - startTime;
 
-    // 5. 保存 AI 回复
+    // 7. 保存 AI 回复
     const rootId = Number(userMsg.rootId ?? userMsg.id);
     const assistantMsg = await this.messageService.createAssistantMessage(
       userId,
@@ -109,7 +110,14 @@ export class ChatService {
       outputTokens,
     );
 
-    // 6. 保存上下文快照
+    // 8. 保存 RAG 检索引用
+    if (retrievedDocs.length > 0) {
+      await this.messageService
+        .saveRagReferences(Number(assistantMsg.id), retrievedDocs)
+        .catch((err) => console.error("[Chat] 保存 RAG 引用失败:", err));
+    }
+
+    // 9. 保存上下文快照
     await this.messageService.saveContext({
       conversationId,
       messageId: Number(assistantMsg.id),
@@ -123,10 +131,10 @@ export class ChatService {
       latency,
     });
 
-    // 7. 更新会话统计
+    // 10. 更新会话统计
     await this.conversationService.touch(conversationId, inputTokens + outputTokens);
 
-    // 8. 首次对话自动生成标题
+    // 11. 首次对话自动生成标题
     if (!conv.title) {
       await this.conversationService.update(conversationId, {
         title: chatDto.prompt.slice(0, 50),
@@ -143,6 +151,33 @@ export class ChatService {
         request_message_id: Number(userMsg.id),
         response_message_id: Number(assistantMsg.id),
       },
+    };
+  }
+
+  /** RAG 检索 + 组装上下文 */
+  private async buildRagContext(
+    prompt: string,
+    kbIds?: number[],
+  ): Promise<{ enhancedPrompt: string; retrievedDocs: RagSearchResult[] }> {
+    if (!kbIds?.length) return { enhancedPrompt: prompt, retrievedDocs: [] };
+
+    const retrievedDocs = await ragService.search(prompt, { kbIds, k: 5 }).catch((err) => {
+      console.error("[Chat] RAG 检索失败:", err);
+      return [];
+    });
+
+    if (retrievedDocs.length === 0) return { enhancedPrompt: prompt, retrievedDocs: [] };
+
+    const ragContext = retrievedDocs
+      .map(
+        (d, i) =>
+          `<document index="${i + 1}" chunk_id="${d.documentId}" score="${d.score.toFixed(4)}">\n${d.content}\n</document>`,
+      )
+      .join("\n\n");
+
+    return {
+      enhancedPrompt: `${prompt}\n\n<documents>\n${ragContext}\n</documents>`,
+      retrievedDocs,
     };
   }
 }

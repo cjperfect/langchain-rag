@@ -98,6 +98,9 @@ export function KnowledgePage() {
   const allKbsRef = useRef(allKbs);
   allKbsRef.current = allKbs;
 
+  // 防止 StrictMode 下 useEffect 重复执行
+  const initRef = useRef(false);
+
   // 加载知识库列表
   const fetchKbList = useCallback(async () => {
     setState({ kbsLoading: true });
@@ -111,6 +114,9 @@ export function KnowledgePage() {
   }, []);
 
   useEffect(() => {
+    if (initRef.current) return;
+    initRef.current = true;
+
     (async () => {
       const data = await fetchKbList();
       if (data.length === 0) return;

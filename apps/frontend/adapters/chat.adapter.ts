@@ -100,8 +100,6 @@ async function* streamChat(body: Record<string, unknown>) {
   }
 }
 
-let lastResponseMessageId: number | null = null;
-
 export const chatAdapter: ChatModelAdapter = {
   async *run({ messages, context, unstable_threadId }) {
     const lastMessage = messages[messages.length - 1];
@@ -111,13 +109,12 @@ export const chatAdapter: ChatModelAdapter = {
         .map((p) => p.text)
         .join("\n") ?? "";
 
-    let parentMessageId = lastResponseMessageId;
-    if (!parentMessageId) {
-      for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].role === "assistant") {
-          parentMessageId = parseInt(messages[i].id, 10) || null;
-          break;
-        }
+    // 从当前会话的消息链中推导 parentMessageId，避免跨会话 ID 污染
+    let parentMessageId: number | null = null;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "assistant") {
+        parentMessageId = parseInt(messages[i].id, 10) || null;
+        break;
       }
     }
 
@@ -136,12 +133,7 @@ export const chatAdapter: ChatModelAdapter = {
     if (kbIds.length > 0) body.knowledge_ids = kbIds;
     if (context.config?.modelName) body.model = context.config.modelName;
 
-    for await (const chunk of streamChat(body)) {
-      if (chunk.metadata?.custom?.response_message_id) {
-        lastResponseMessageId = chunk.metadata.custom.response_message_id;
-      }
-      yield chunk;
-    }
+    yield* streamChat(body);
   },
 };
 
@@ -160,11 +152,21 @@ export function createKnowledgeChatAdapter(
           .map((p) => p.text)
           .join("\n") ?? "";
 
+      // 从当前会话的消息链中推导 parentMessageId
+      let parentMessageId: number | null = null;
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === "assistant") {
+          parentMessageId = parseInt(messages[i].id, 10) || null;
+          break;
+        }
+      }
+
       const body: Record<string, unknown> = {
         prompt: userMessage,
         knowledge_id: knowledgeBaseId,
       };
       if (conversationId) body.chat_session_id = conversationId;
+      if (parentMessageId) body.parent_message_id = parentMessageId;
       if (context.config?.modelName) body.model = context.config.modelName;
 
       yield* streamChat(body);
