@@ -3,6 +3,7 @@ import { createAgent } from "langchain";
 import { createModel, defaultModel } from "./model";
 import { systemPrompt } from "../prompts";
 import { activitySqlTool } from "../tools/activity-sql";
+import { knowledgeSearchTool, getLastSearchResults } from "../tools/knowledge-search";
 import type { ChatOptions } from "@langchain-rag/shared/interfaces";
 import { toLangChainMessages } from "../libs/messages";
 import { StreamEvent } from "../interfaces/message";
@@ -13,7 +14,7 @@ export class AiEngine {
    */
   private static readonly agent = createAgent({
     model: defaultModel,
-    tools: [activitySqlTool],
+    tools: [activitySqlTool, knowledgeSearchTool],
     systemPrompt,
   });
 
@@ -23,7 +24,7 @@ export class AiEngine {
     if (!modelName || modelName === defaultModel.model) return AiEngine.agent;
     return createAgent({
       model: createModel(modelName),
-      tools: [activitySqlTool],
+      tools: [activitySqlTool, knowledgeSearchTool],
       systemPrompt,
     });
   }
@@ -82,15 +83,32 @@ export class AiEngine {
           }
           break;
         }
+        // 知识库检索工具 → 专用事件，前端可展示检索状态 + 知识库名称
         case "on_tool_start":
-          yield { type: "tool_start", name: event.name };
+          if (event.name === "search_knowledge_base") {
+            const input = (event.data.input as { query: string; kbIds?: number[] }) ?? {};
+            yield { type: "knowledge_search", query: input.query || "", kbIds: input.kbIds };
+          } else {
+            yield { type: "tool_start", name: event.name };
+          }
           break;
         case "on_tool_end":
-          yield {
-            type: "tool_end",
-            name: event.name,
-            result: event.data.output,
-          };
+          if (event.name === "search_knowledge_base") {
+            const rawResults = getLastSearchResults();
+            const kbNames = [...new Set(rawResults.map((r) => r.kbName).filter(Boolean) as string[])];
+            yield {
+              type: "knowledge_search",
+              query: "",
+              kbNames,
+              results: event.data.output as string,
+            };
+          } else {
+            yield {
+              type: "tool_end",
+              name: event.name,
+              result: event.data.output,
+            };
+          }
           break;
       }
     }

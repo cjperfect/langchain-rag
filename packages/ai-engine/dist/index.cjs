@@ -36,7 +36,7 @@ var import_config = require("dotenv/config");
 
 // src/agent/index.ts
 var import_messages2 = require("@langchain/core/messages");
-var import_langchain2 = require("langchain");
+var import_langchain3 = require("langchain");
 
 // src/agent/model.ts
 var import_constants = require("@langchain-rag/shared/constants");
@@ -251,6 +251,189 @@ var activitySqlTool = (0, import_langchain.tool)(
   }
 );
 
+// src/tools/knowledge-search.ts
+var import_langchain2 = require("langchain");
+var import_zod2 = require("zod");
+
+// src/rag/rag.service.ts
+var import_pgvector = require("@langchain/community/vectorstores/pgvector");
+var import_documents = require("@langchain/core/documents");
+var import_textsplitters = require("@langchain/textsplitters");
+
+// src/embeddings/embedding.service.ts
+var import_ollama = require("@langchain/ollama");
+var EMBEDDING_BASE_URL = process.env.EMBEDDING_BASE_URL ?? "http://localhost:11434";
+var EMBEDDING_MODEL = process.env.EMBEDDING_MODEL ?? "qwen3-embedding:0.6b";
+var baseEmbeddingConfig = {
+  model: EMBEDDING_MODEL,
+  baseUrl: EMBEDDING_BASE_URL,
+  batchSize: 32,
+  stripNewLines: false
+};
+function createEmbeddings(modelName) {
+  return new import_ollama.OllamaEmbeddings({
+    ...baseEmbeddingConfig,
+    model: modelName ?? EMBEDDING_MODEL
+  });
+}
+var defaultEmbeddings = createEmbeddings();
+
+// src/constants/rag.ts
+var RAG_TABLE_NAME = "langchain_pg_embedding";
+var RAG_EMBEDDING_DIMENSIONS = Number(process.env.EMBEDDING_DIMENSIONS ?? "1024");
+
+// src/rag/rag.service.ts
+var RagService = class {
+  vectorStore = null;
+  embeddings;
+  constructor(embeddings) {
+    this.embeddings = embeddings ?? defaultEmbeddings;
+  }
+  /** 初始化 PGVectorStore（延迟初始化，避免模块加载时立即连接 DB） */
+  async getStore() {
+    if (this.vectorStore) return this.vectorStore;
+    const config = {
+      postgresConnectionOptions: {
+        connectionString: process.env.DATABASE_URL
+      },
+      tableName: RAG_TABLE_NAME,
+      columns: {
+        idColumnName: "id",
+        contentColumnName: "content",
+        metadataColumnName: "metadata",
+        vectorColumnName: "embedding"
+      },
+      distanceStrategy: "cosine",
+      scoreNormalization: "similarity"
+    };
+    this.vectorStore = await import_pgvector.PGVectorStore.initialize(this.embeddings, {
+      ...config,
+      dimensions: RAG_EMBEDDING_DIMENSIONS
+    });
+    return this.vectorStore;
+  }
+  /**
+   * 索引文档：切片 + 向量化，返回切片数据供后端写 DB
+   *
+   * @param kbId 知识库 ID
+   * @param documentId 文档 ID
+   * @param content 文档全文
+   * @param names 知识库名称 / 文档文件名（存入 vector metadata，检索时直接返回）
+   * @returns 切片列表（含序号和 token 估算）
+   */
+  async indexDocument(kbId, documentId, content, names) {
+    const texts = await splitTextToChunks(content);
+    if (texts.length === 0) return [];
+    const store = await this.getStore();
+    const docs = texts.map(
+      (text, i) => new import_documents.Document({
+        pageContent: text,
+        metadata: {
+          documentId,
+          kbId,
+          chunkIndex: i + 1,
+          kbName: names?.kbName,
+          documentName: names?.documentName
+        }
+      })
+    );
+    await store.addDocuments(docs);
+    return texts.map((text, i) => ({
+      content: text,
+      index: i + 1,
+      tokenCount: Math.ceil(text.length / 2)
+    }));
+  }
+  /**
+   * 重建索引：删除旧向量 → 重新切片 → 重新向量化
+   */
+  async reindexDocument(documentId, kbId, content, names) {
+    await this.deleteByDocumentId(documentId);
+    return this.indexDocument(kbId, documentId, content, names);
+  }
+  /**
+   * 向量相似度检索
+   *
+   * @param query 用户问题
+   * @param options.kbIds 限制在指定知识库
+   * @param options.k top-K
+   */
+  async search(query, options = {}) {
+    const { kbIds, k = 5 } = options;
+    const store = await this.getStore();
+    const filter = kbIds && kbIds.length > 0 ? { kbId: { in: kbIds } } : void 0;
+    const results = await store.similaritySearchWithScore(query, k, filter);
+    return results.map(([doc, score]) => {
+      const metadata = doc.metadata;
+      return {
+        content: doc.pageContent,
+        documentId: metadata.documentId,
+        kbId: metadata.kbId,
+        kbName: metadata.kbName,
+        documentName: metadata.documentName,
+        score
+      };
+    });
+  }
+  /**
+   * 删除某个文档的所有向量
+   *
+   * PGVectorStore 通过 metadata 过滤删除
+   */
+  async deleteByDocumentId(documentId) {
+    const store = await this.getStore();
+    await store.delete({ filter: { documentId } });
+  }
+};
+async function splitTextToChunks(text) {
+  const splitter = new import_textsplitters.RecursiveCharacterTextSplitter({
+    chunkSize: 500,
+    chunkOverlap: 50,
+    separators: ["\n\n", "\n", "\u3002", "\uFF01", "\uFF1F", "\uFF1B", "\uFF0C", " ", ""]
+  });
+  const docs = await splitter.createDocuments([text]);
+  return docs.map((d) => d.pageContent).filter(Boolean);
+}
+var ragService = new RagService();
+
+// src/tools/knowledge-search.ts
+var lastSearchResults = [];
+function getLastSearchResults() {
+  return lastSearchResults;
+}
+var knowledgeSearchTool = (0, import_langchain2.tool)(
+  async ({ query, kbIds }) => {
+    const results = await ragService.search(query, {
+      kbIds: kbIds ?? void 0,
+      k: 5
+    });
+    lastSearchResults = results;
+    if (results.length === 0) {
+      return "\u672A\u627E\u5230\u76F8\u5173\u6587\u6863\u3002\u8BF7\u544A\u77E5\u7528\u6237\u5F53\u524D\u77E5\u8BC6\u5E93\u4E2D\u6CA1\u6709\u5339\u914D\u7684\u4FE1\u606F\u3002";
+    }
+    return results.map(
+      (r, i) => `[\u6587\u6863\u7247\u6BB5 ${i + 1}] \u6765\u6E90: ${r.kbName ?? `\u77E5\u8BC6\u5E93#${r.kbId}`}${r.documentName ? `/${r.documentName}` : ""} (\u76F8\u4F3C\u5EA6: ${(r.score * 100).toFixed(1)}%)
+${r.content}`
+    ).join("\n\n");
+  },
+  {
+    name: "search_knowledge_base",
+    description: `\u5728\u4F01\u4E1A\u77E5\u8BC6\u5E93\u4E2D\u68C0\u7D22\u76F8\u5173\u6587\u6863\u5185\u5BB9\u3002
+\u9002\u7528\u573A\u666F\uFF1A
+- \u7528\u6237\u8BE2\u95EE\u516C\u53F8\u653F\u7B56\u3001\u6D41\u7A0B\u3001\u89C4\u8303\u3001\u4EA7\u54C1\u6587\u6863\u7B49\u5185\u90E8\u8D44\u6599
+- \u9700\u8981\u67E5\u627E\u7279\u5B9A\u4E1A\u52A1\u77E5\u8BC6\u6216\u64CD\u4F5C\u6307\u5357
+- \u7528\u6237\u7684\u95EE\u9898\u9700\u8981\u57FA\u4E8E\u516C\u53F8\u6587\u6863\u6765\u56DE\u7B54
+
+\u6CE8\u610F\uFF1A
+- \u68C0\u7D22\u7ED3\u679C\u6765\u81EA\u5411\u91CF\u76F8\u4F3C\u5EA6\u5339\u914D\uFF0C\u53EF\u80FD\u4E0D\u5B8C\u5168\u7CBE\u786E
+- \u5982\u679C\u68C0\u7D22\u65E0\u7ED3\u679C\uFF0C\u8BF7\u660E\u786E\u544A\u77E5\u7528\u6237\u77E5\u8BC6\u5E93\u4E2D\u6CA1\u6709\u76F8\u5173\u4FE1\u606F`,
+    schema: import_zod2.z.object({
+      query: import_zod2.z.string().describe("\u68C0\u7D22\u67E5\u8BE2\u8BED\u53E5\uFF0C\u5EFA\u8BAE\u4F7F\u7528\u95EE\u9898\u4E2D\u7684\u5173\u952E\u8BCD"),
+      kbIds: import_zod2.z.array(import_zod2.z.number()).optional().describe("\u9650\u5B9A\u68C0\u7D22\u7684\u77E5\u8BC6\u5E93 ID \u5217\u8868\uFF0C\u4E0D\u4F20\u5219\u68C0\u7D22\u6240\u6709\u77E5\u8BC6\u5E93")
+    })
+  }
+);
+
 // src/libs/messages.ts
 var import_messages = require("@langchain/core/messages");
 function toLangChainMessages(messages) {
@@ -271,17 +454,17 @@ var AiEngine = class _AiEngine {
   /**
    * Agent 全局单例
    */
-  static agent = (0, import_langchain2.createAgent)({
+  static agent = (0, import_langchain3.createAgent)({
     model: defaultModel,
-    tools: [activitySqlTool],
+    tools: [activitySqlTool, knowledgeSearchTool],
     systemPrompt
   });
   /** 获取 agent（需要切换模型时创建新实例） */
   getAgent(modelName) {
     if (!modelName || modelName === defaultModel.model) return _AiEngine.agent;
-    return (0, import_langchain2.createAgent)({
+    return (0, import_langchain3.createAgent)({
       model: createModel(modelName),
-      tools: [activitySqlTool],
+      tools: [activitySqlTool, knowledgeSearchTool],
       systemPrompt
     });
   }
@@ -328,15 +511,32 @@ var AiEngine = class _AiEngine {
           }
           break;
         }
+        // 知识库检索工具 → 专用事件，前端可展示检索状态 + 知识库名称
         case "on_tool_start":
-          yield { type: "tool_start", name: event.name };
+          if (event.name === "search_knowledge_base") {
+            const input2 = event.data.input ?? {};
+            yield { type: "knowledge_search", query: input2.query || "", kbIds: input2.kbIds };
+          } else {
+            yield { type: "tool_start", name: event.name };
+          }
           break;
         case "on_tool_end":
-          yield {
-            type: "tool_end",
-            name: event.name,
-            result: event.data.output
-          };
+          if (event.name === "search_knowledge_base") {
+            const rawResults = getLastSearchResults();
+            const kbNames = [...new Set(rawResults.map((r) => r.kbName).filter(Boolean))];
+            yield {
+              type: "knowledge_search",
+              query: "",
+              kbNames,
+              results: event.data.output
+            };
+          } else {
+            yield {
+              type: "tool_end",
+              name: event.name,
+              result: event.data.output
+            };
+          }
           break;
       }
     }
@@ -362,11 +562,11 @@ async function loadPdf(filePath, options) {
 
 // src/loaders/text.loader.ts
 var import_fs = require("fs");
-var import_documents = require("@langchain/core/documents");
+var import_documents2 = require("@langchain/core/documents");
 async function loadText(filePath) {
   const content = (0, import_fs.readFileSync)(filePath, "utf-8");
   return [
-    new import_documents.Document({
+    new import_documents2.Document({
       pageContent: content,
       metadata: { source: filePath }
     })
@@ -375,141 +575,6 @@ async function loadText(filePath) {
 async function loadMarkdown(filePath) {
   return loadText(filePath);
 }
-
-// src/embeddings/embedding.service.ts
-var import_openai2 = require("@langchain/openai");
-var EMBEDDING_BASE_URL = process.env.EMBEDDING_BASE_URL ?? "http://localhost:11434/v1";
-var EMBEDDING_MODEL = process.env.EMBEDDING_MODEL ?? "qwen3-embedding:0.6b";
-var EMBEDDING_API_KEY = process.env.EMBEDDING_API_KEY ?? "ollama";
-var baseEmbeddingConfig = {
-  apiKey: EMBEDDING_API_KEY,
-  model: EMBEDDING_MODEL,
-  configuration: { baseURL: EMBEDDING_BASE_URL },
-  batchSize: 32,
-  stripNewLines: false
-};
-function createEmbeddings(modelName) {
-  return new import_openai2.OpenAIEmbeddings({
-    ...baseEmbeddingConfig,
-    model: modelName ?? EMBEDDING_MODEL
-  });
-}
-var defaultEmbeddings = createEmbeddings();
-
-// src/rag/rag.service.ts
-var import_pgvector = require("@langchain/community/vectorstores/pgvector");
-var import_documents2 = require("@langchain/core/documents");
-var import_textsplitters = require("@langchain/textsplitters");
-var TABLE_NAME = "langchain_pg_embedding";
-var EMBEDDING_DIMENSIONS = Number(process.env.EMBEDDING_DIMENSIONS ?? "1024");
-var RagService = class {
-  vectorStore = null;
-  embeddings;
-  constructor(embeddings) {
-    this.embeddings = embeddings ?? defaultEmbeddings;
-  }
-  /** 初始化 PGVectorStore（延迟初始化，避免模块加载时立即连接 DB） */
-  async getStore() {
-    if (this.vectorStore) return this.vectorStore;
-    const config = {
-      postgresConnectionOptions: {
-        connectionString: process.env.DATABASE_URL
-      },
-      tableName: TABLE_NAME,
-      columns: {
-        idColumnName: "id",
-        contentColumnName: "content",
-        metadataColumnName: "metadata",
-        vectorColumnName: "embedding"
-      },
-      distanceStrategy: "cosine",
-      scoreNormalization: "similarity"
-    };
-    this.vectorStore = await import_pgvector.PGVectorStore.initialize(this.embeddings, {
-      ...config,
-      dimensions: EMBEDDING_DIMENSIONS
-    });
-    return this.vectorStore;
-  }
-  /**
-   * 索引文档：切片 + 向量化，返回切片数据供后端写 DB
-   *
-   * @param kbId 知识库 ID
-   * @param documentId 文档 ID
-   * @param content 文档全文
-   * @returns 切片列表（含序号和 token 估算）
-   */
-  async indexDocument(kbId, documentId, content) {
-    const texts = await splitTextToChunks(content);
-    if (texts.length === 0) return [];
-    const store = await this.getStore();
-    const docs = texts.map(
-      (text, i) => new import_documents2.Document({
-        pageContent: text,
-        metadata: {
-          documentId,
-          kbId,
-          chunkIndex: i + 1
-        }
-      })
-    );
-    await store.addDocuments(docs);
-    return texts.map((text, i) => ({
-      content: text,
-      index: i + 1,
-      tokenCount: Math.ceil(text.length / 2)
-    }));
-  }
-  /**
-   * 重建索引：删除旧向量 → 重新切片 → 重新向量化
-   */
-  async reindexDocument(documentId, kbId, content) {
-    await this.deleteByDocumentId(documentId);
-    return this.indexDocument(kbId, documentId, content);
-  }
-  /**
-   * 向量相似度检索
-   *
-   * @param query 用户问题
-   * @param options.kbIds 限制在指定知识库
-   * @param options.k top-K
-   */
-  async search(query, options = {}) {
-    const { kbIds, k = 5 } = options;
-    const store = await this.getStore();
-    const filter = kbIds && kbIds.length > 0 ? { kbId: { in: kbIds } } : void 0;
-    const results = await store.similaritySearchWithScore(query, k, filter);
-    return results.map(([doc, score]) => {
-      const metadata = doc.metadata;
-      return {
-        content: doc.pageContent,
-        documentId: metadata.documentId,
-        kbId: metadata.kbId,
-        score
-        // PGVectorStore with scoreNormalization="similarity" already returns similarity
-      };
-    });
-  }
-  /**
-   * 删除某个文档的所有向量
-   *
-   * PGVectorStore 通过 metadata 过滤删除
-   */
-  async deleteByDocumentId(documentId) {
-    const store = await this.getStore();
-    await store.delete({ filter: { documentId } });
-  }
-};
-async function splitTextToChunks(text) {
-  const splitter = new import_textsplitters.RecursiveCharacterTextSplitter({
-    chunkSize: 500,
-    chunkOverlap: 50,
-    separators: ["\n\n", "\n", "\u3002", "\uFF01", "\uFF1F", "\uFF1B", "\uFF0C", " ", ""]
-  });
-  const docs = await splitter.createDocuments([text]);
-  return docs.map((d) => d.pageContent).filter(Boolean);
-}
-var ragService = new RagService();
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   AiEngine,

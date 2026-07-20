@@ -3,41 +3,10 @@ import type { EmbeddingsInterface } from "@langchain/core/embeddings";
 import { Document } from "@langchain/core/documents";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { defaultEmbeddings } from "../embeddings";
+import type { ChunkData, RagSearchResult, ChunkMetadata } from "../interfaces/rag";
+import { RAG_TABLE_NAME, RAG_EMBEDDING_DIMENSIONS } from "../constants/rag";
 
-/** 切片数据（索引后返回给后端写 DB） */
-export interface ChunkData {
-  /** 切片文本内容 */
-  content: string;
-  /** 切片序号 */
-  index: number;
-  /** 估算 token 数 */
-  tokenCount: number;
-}
-
-/** 检索结果 */
-export interface RagSearchResult {
-  /** chunk 文本内容 */
-  content: string;
-  /** 文档 ID */
-  documentId: number;
-  /** 知识库 ID */
-  kbId: number;
-  /** 余弦相似度 (0~1，越高越相似) */
-  score: number;
-}
-
-/** PGVectorStore 中存储的 metadata */
-interface ChunkMetadata {
-  documentId: number;
-  kbId: number;
-  chunkIndex: number;
-}
-
-/** PGVectorStore 表名 */
-const TABLE_NAME = "langchain_pg_embedding";
-
-/** 向量维度（qwen3.7-text-embedding 默认 1024） */
-const EMBEDDING_DIMENSIONS = Number(process.env.EMBEDDING_DIMENSIONS ?? "1024");
+export type { ChunkData, RagSearchResult };
 
 /**
  * RAG 服务 — 文档向量化 + 向量检索
@@ -61,7 +30,7 @@ export class RagService {
       postgresConnectionOptions: {
         connectionString: process.env.DATABASE_URL,
       },
-      tableName: TABLE_NAME,
+      tableName: RAG_TABLE_NAME,
       columns: {
         idColumnName: "id",
         contentColumnName: "content",
@@ -74,7 +43,7 @@ export class RagService {
 
     this.vectorStore = await PGVectorStore.initialize(this.embeddings, {
       ...config,
-      dimensions: EMBEDDING_DIMENSIONS,
+      dimensions: RAG_EMBEDDING_DIMENSIONS,
     });
     return this.vectorStore;
   }
@@ -85,12 +54,14 @@ export class RagService {
    * @param kbId 知识库 ID
    * @param documentId 文档 ID
    * @param content 文档全文
+   * @param names 知识库名称 / 文档文件名（存入 vector metadata，检索时直接返回）
    * @returns 切片列表（含序号和 token 估算）
    */
   async indexDocument(
     kbId: number,
     documentId: number,
     content: string,
+    names?: { kbName?: string; documentName?: string },
   ): Promise<ChunkData[]> {
     const texts = await splitTextToChunks(content);
     if (texts.length === 0) return [];
@@ -105,6 +76,8 @@ export class RagService {
             documentId,
             kbId,
             chunkIndex: i + 1,
+            kbName: names?.kbName,
+            documentName: names?.documentName,
           } satisfies ChunkMetadata,
         }),
     );
@@ -125,9 +98,10 @@ export class RagService {
     documentId: number,
     kbId: number,
     content: string,
+    names?: { kbName?: string; documentName?: string },
   ): Promise<ChunkData[]> {
     await this.deleteByDocumentId(documentId);
-    return this.indexDocument(kbId, documentId, content);
+    return this.indexDocument(kbId, documentId, content, names);
   }
 
   /**
@@ -155,7 +129,9 @@ export class RagService {
         content: doc.pageContent,
         documentId: metadata.documentId,
         kbId: metadata.kbId,
-        score: score, // PGVectorStore with scoreNormalization="similarity" already returns similarity
+        kbName: metadata.kbName,
+        documentName: metadata.documentName,
+        score,
       };
     });
   }
