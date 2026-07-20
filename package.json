@@ -15,6 +15,7 @@
     "build:ai-engine": "pnpm --filter @langchain-rag/ai-engine build",
     "dev:ai-engine": "pnpm --filter @langchain-rag/ai-engine dev",
     "db:migrate": "pnpm --filter @langchain-rag/backend db:migrate",
+    "db:reset": "pnpm --filter @langchain-rag/backend db:reset",
     "db:generate": "pnpm --filter @langchain-rag/backend db:generate",
     "db:seed": "pnpm --filter @langchain-rag/backend db:seed",
     "typecheck": "pnpm -r exec tsc --noEmit",

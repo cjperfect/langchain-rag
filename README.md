@@ -78,10 +78,11 @@ docker compose -f docker/docker-compose.yml up -d
 ### 4. 初始化数据库
 
 ```bash
-pnpm db:migrate
-
-# 生成测试数据
-pnpm db:seed
+  pnpm db:generate         →   根据Schema生成Typescript类型，改代码类型
+        ↓
+  pnpm db:migrate          →   创建表（migration），修改数据库结构
+        ↓
+  pnpm db:seed             →   写入种子数据（seed.ts），填充测试数据
 
 ```
 
