@@ -11,7 +11,7 @@ import {
   ParseIntPipe,
 } from "@nestjs/common";
 import { ConversationService } from "./conversation.service";
-import { CreateConversationDto, UpdateConversationDto, GenerateTitleDto } from "./dto/conversation.dto";
+import type { CreateConversationDto, UpdateConversationDto, GenerateTitleDto } from "./dto/conversation.dto";
 // TODO: 临时跳过登录校验
 // import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";

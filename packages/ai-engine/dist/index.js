@@ -266,7 +266,10 @@ var AiEngine = class _AiEngine {
    */
   async *stream(input, options = {}) {
     const messages = [...toLangChainMessages(options.history ?? []), new HumanMessage2(input)];
-    const stream = await this.getAgent(options.model).stream({ messages }, { streamMode: "messages" });
+    const stream = await this.getAgent(options.model).stream(
+      { messages },
+      { streamMode: "messages" }
+    );
     for await (const [chunk] of stream) {
       if (typeof chunk.content === "string") {
         yield chunk.content;
@@ -306,6 +309,43 @@ var AiEngine = class _AiEngine {
     }
   }
 };
+
+// src/loaders/csv.loader.ts
+import { CSVLoader } from "@langchain/community/document_loaders/fs/csv";
+async function loadCsv(filePath, options) {
+  const loader = new CSVLoader(filePath, options);
+  return loader.load();
+}
+
+// src/loaders/pdf.loader.ts
+import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
+async function loadPdf(filePath, options) {
+  const loader = new PDFLoader(filePath, {
+    splitPages: options?.splitPages,
+    parsedItemSeparator: options?.parsedItemSeparator
+  });
+  return loader.load();
+}
+
+// src/loaders/text.loader.ts
+import { readFileSync } from "fs";
+import { Document } from "@langchain/core/documents";
+async function loadText(filePath) {
+  const content = readFileSync(filePath, "utf-8");
+  return [
+    new Document({
+      pageContent: content,
+      metadata: { source: filePath }
+    })
+  ];
+}
+async function loadMarkdown(filePath) {
+  return loadText(filePath);
+}
 export {
-  AiEngine
+  AiEngine,
+  loadCsv,
+  loadMarkdown,
+  loadPdf,
+  loadText
 };

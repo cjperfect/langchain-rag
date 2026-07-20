@@ -47,7 +47,10 @@ export class AiEngine {
   async *stream(input: string, options: ChatOptions = {}): AsyncGenerator<string> {
     const messages = [...toLangChainMessages(options.history ?? []), new HumanMessage(input)];
 
-    const stream = await this.getAgent(options.model).stream({ messages }, { streamMode: "messages" });
+    const stream = await this.getAgent(options.model).stream(
+      { messages },
+      { streamMode: "messages" },
+    );
 
     for await (const [chunk] of stream) {
       if (typeof chunk.content === "string") {
@@ -69,7 +72,8 @@ export class AiEngine {
         case "on_chat_model_stream": {
           const chunk = event.data.chunk;
           // 思考过程
-          const reasoning = chunk.additional_kwargs?.reasoning || chunk.additional_kwargs?.reasoning_content;
+          const reasoning =
+            chunk.additional_kwargs?.reasoning || chunk.additional_kwargs?.reasoning_content;
           if (typeof reasoning === "string" && reasoning) {
             yield { type: "reasoning", content: reasoning };
           }

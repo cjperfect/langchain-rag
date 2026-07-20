@@ -2,6 +2,8 @@ import { Injectable } from "@nestjs/common";
 import { ConversationService } from "../conversation/conversation.service";
 import { MessageService } from "../message/message.service";
 import { AiEngine } from "@langchain-rag/ai-engine";
+import { BusinessException } from "../common/exceptions/business.exception";
+import { ErrorCode } from "@langchain-rag/shared";
 import type { ChatDto, ChatStreamEvent } from "./dto/chat.dto";
 import { DEFAULT_MODEL } from "src/common/constants";
 import { ContextMessage } from "@langchain-rag/shared/interfaces";
@@ -20,20 +22,26 @@ export class ChatService {
     private readonly messageService: MessageService,
   ) {}
 
-  /** AI 流式聊天 */
+  /**
+   * 聊天：
+   * 1. 新增一个会话
+   * 2. 获取会话id
+   * 3. yield给前端，下次发消息的时候带上
+   */
   async *streamChat(userId: number, chatDto: ChatDto): AsyncGenerator<ChatStreamEvent> {
     // 1. 获取会话（前端 initialize 已创建）
     const conversationId = chatDto.chat_session_id;
     if (conversationId == null) {
-      throw new Error("缺少 chat_session_id，前端可能未初始化会话");
+      throw new BusinessException(ErrorCode.BAD_REQUEST, "未初始化会话");
     }
+
     const conv = await this.conversationService.get(Number(conversationId));
 
     yield { event: "session", data: { session_id: conversationId } };
 
     // 2. 确定父消息 ID（前端传了 parent_message_id 则用它，否则用 currentMessageId）
     const parentMessageId = chatDto.parent_message_id
-      ? Number(chatDto.parent_message_id)
+      ? chatDto.parent_message_id
       : Number(conv.currentMessageId);
 
     // 3. 构建上下文（取父消息之前的历史）

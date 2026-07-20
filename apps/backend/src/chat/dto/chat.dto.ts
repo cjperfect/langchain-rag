@@ -1,14 +1,18 @@
-export class ChatDto {
-  // 用户提示词
-  prompt!: string;
-  // 会话id（前端 initialize 已创建，必传）
-  chat_session_id!: number;
-  // 模型（前端 ModelSelector 选择）
+export interface ChatDto {
+  /** 用户提示词 */
+  prompt: string;
+  /** 会话 ID（前端 initialize 已创建，必传） */
+  chat_session_id: number;
+  /** 模型（前端 ModelSelector 选择） */
   model?: string;
-  // 是否开启思考模式
+  /** 是否开启思考模式 */
   thinking_enabled?: boolean;
-  // 父级消息id
+  /** 父级消息 ID */
   parent_message_id?: number;
+  /** @mention 选中的知识库 ID 列表 */
+  knowledge_ids?: number[];
+  /** 知识库内聊天的知识库 ID */
+  knowledge_id?: number;
 }
 
 /**

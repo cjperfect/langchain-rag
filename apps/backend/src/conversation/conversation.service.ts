@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { Prisma } from "@prisma/client";
 import { Exceptions } from "../common/exceptions/business.exception";
-import { ErrorCode } from "@langchain-rag/shared";
+import { CommonStatus } from "@langchain-rag/shared";
 import { AiEngine } from "@langchain-rag/ai-engine";
 import type {
   CreateConversationDto,
@@ -32,7 +32,7 @@ export class ConversationService {
   async list(userId: number, knowledgeId?: number) {
     const where: Prisma.ChatConversationWhereInput = {
       userId,
-      status: { in: [1, 2] },
+      status: { in: [CommonStatus.NORMAL, CommonStatus.ARCHIVED] },
     };
     if (knowledgeId !== undefined) {
       where.knowledgeId = knowledgeId;
@@ -63,7 +63,7 @@ export class ConversationService {
     const conv = await this.prisma.chatConversation.findUnique({
       where: { id: Number(conversationId) },
     });
-    if (!conv) throw Exceptions.notFound(ErrorCode.CONVERSATION_NOT_FOUND, "会话不存在");
+    if (!conv) throw Exceptions.notFound("会话不存在");
     return conv;
   }
 
@@ -97,7 +97,7 @@ export class ConversationService {
     await this.get(conversationId); // 确保存在
     return this.prisma.chatConversation.update({
       where: { id: conversationId },
-      data: { status: 3 },
+      data: { status: CommonStatus.DELETED },
     });
   }
 

@@ -13,7 +13,7 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { KnowledgeService } from "./knowledge.service";
-import { CreateKnowledgeBaseDto, UpdateKnowledgeBaseDto, CreateDocumentDto, UpdateDocumentDto } from "./dto/knowledge.dto";
+import type { CreateKnowledgeBaseDto, UpdateKnowledgeBaseDto, CreateDocumentDto, UpdateDocumentDto } from "./dto/knowledge.dto";
 // TODO: 临时跳过登录校验
 // import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
@@ -85,10 +85,9 @@ export class KnowledgeController {
     @CurrentUser() user: { id: number },
     @UploadedFile() file: { buffer: Buffer; originalname: string; size: number },
   ) {
-    const content = file.buffer.toString("utf-8");
     return this.knowledgeService.uploadDocument(id, user.id, {
       fileName: file.originalname,
-      content,
+      buffer: file.buffer,
       size: file.size,
     });
   }

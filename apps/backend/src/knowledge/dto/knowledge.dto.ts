@@ -1,19 +1,27 @@
-export class CreateKnowledgeBaseDto {
-  name!: string;
+export interface CreateKnowledgeBaseDto {
+  /** 知识库名称 */
+  name: string;
+  /** 描述 */
   description?: string;
 }
 
-export class UpdateKnowledgeBaseDto {
+export interface UpdateKnowledgeBaseDto {
+  /** 知识库名称 */
   name?: string;
+  /** 描述 */
   description?: string;
 }
 
-export class CreateDocumentDto {
-  fileName!: string;
-  content!: string;
+export interface CreateDocumentDto {
+  /** 文件名 */
+  fileName: string;
+  /** Markdown 内容 */
+  content: string;
 }
 
-export class UpdateDocumentDto {
+export interface UpdateDocumentDto {
+  /** Markdown 内容 */
   content?: string;
+  /** 文件名 */
   fileName?: string;
 }

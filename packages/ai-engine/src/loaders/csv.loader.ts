@@ -1,12 +1,6 @@
 import { CSVLoader } from "@langchain/community/document_loaders/fs/csv";
 import type { Document } from "@langchain/core/documents";
-
-export interface CsvLoadOptions {
-  /** 作为 pageContent 的列名，不传则整行转 key: value */
-  column?: string;
-  /** 分隔符，默认逗号 */
-  separator?: string;
-}
+import { CsvLoadOptions } from "../interfaces/loader";
 
 /**
  * 加载 CSV 文件，每行返回一个 Document。

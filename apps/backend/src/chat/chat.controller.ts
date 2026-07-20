@@ -1,6 +1,6 @@
 import { Controller, Body, Res, Post } from "@nestjs/common";
 import { ChatService } from "./chat.service";
-import { ChatDto } from "./dto/chat.dto";
+import type { ChatDto } from "./dto/chat.dto";
 // TODO: 临时跳过登录校验
 // import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";

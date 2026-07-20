@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { PrismaService } from "../prisma/prisma.service";
-import { Exceptions } from "../common/exceptions/business.exception";
+import { Exceptions, BusinessException } from "../common/exceptions/business.exception";
 import { ErrorCode } from "@langchain-rag/shared";
 import * as bcrypt from "bcryptjs";
 import type { RegisterDto, LoginDto } from "./dto/auth.dto";
@@ -19,7 +19,7 @@ export class AuthService {
       where: { email: dto.email },
     });
     if (existing) {
-      throw Exceptions.conflict(ErrorCode.EMAIL_ALREADY_EXISTS, "邮箱已注册");
+      throw new BusinessException(ErrorCode.CONFLICT, "邮箱已注册");
     }
 
     const hashed = await bcrypt.hash(dto.password, 10);
@@ -41,12 +41,12 @@ export class AuthService {
       where: { email: dto.email },
     });
     if (!user) {
-      throw Exceptions.unauthorized(ErrorCode.INVALID_CREDENTIALS, "邮箱或密码错误");
+      throw Exceptions.unauthorized("邮箱或密码错误");
     }
 
     const valid = await bcrypt.compare(dto.password, user.password);
     if (!valid) {
-      throw Exceptions.unauthorized(ErrorCode.INVALID_CREDENTIALS, "邮箱或密码错误");
+      throw Exceptions.unauthorized("邮箱或密码错误");
     }
 
     return this.signToken(user.id, user.email);
@@ -59,7 +59,7 @@ export class AuthService {
       select: { id: true, name: true, email: true },
     });
     if (!user) {
-      throw Exceptions.unauthorized(ErrorCode.USER_NOT_FOUND, "用户不存在");
+      throw Exceptions.unauthorized("用户不存在");
     }
     return user;
   }

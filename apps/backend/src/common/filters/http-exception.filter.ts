@@ -21,24 +21,21 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
 
-    let code: number;       // 响应体中的 code（ErrorCode）
-    let message: string;    // 响应体中的 message
+    let code: number; // 响应体中的 code（ErrorCode）
+    let message: string; // 响应体中的 message
     let httpStatus: number; // HTTP 状态码
 
     if (exception instanceof BusinessException) {
-      code = exception.code;        // 使用 ErrorCode 枚举值
-      message = exception.message;
       httpStatus = exception.getStatus();
+      code = httpStatus;
+      message = exception.message;
     } else if (exception instanceof HttpException) {
       httpStatus = exception.getStatus();
-      code = httpStatus;            // 非业务异常，code = HTTP 状态码
+      code = httpStatus; // 非业务异常，code = HTTP 状态码
       const res = exception.getResponse();
-      message =
-        typeof res === "string"
-          ? res
-          : (res as any).message ?? exception.message;
+      message = typeof res === "string" ? res : ((res as any).message ?? exception.message);
       if (Array.isArray(message)) {
-        message = message[0];       // class-validator 错误取第一条
+        message = message[0]; // class-validator 错误取第一条
       }
     } else {
       // 未知异常

@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { Exceptions } from "../common/exceptions/business.exception";
-import { ErrorCode } from "@langchain-rag/shared";
+import { CommonStatus } from "@langchain-rag/shared";
 import type { SendMessageDto, EditMessageDto } from "./dto/message.dto";
 
 @Injectable()
@@ -13,7 +13,7 @@ export class MessageService {
     const conv = await this.prisma.chatConversation.findUnique({
       where: { id: conversationId },
     });
-    if (!conv) throw Exceptions.notFound(ErrorCode.CONVERSATION_NOT_FOUND, "会话不存在");
+    if (!conv) throw Exceptions.notFound("会话不存在");
 
     // 未指定 rootId 时，从 currentMessageId 追溯找到分支根
     let targetRootId = rootId;
@@ -68,7 +68,7 @@ export class MessageService {
     const conv = await this.prisma.chatConversation.findUnique({
       where: { id: conversationId },
     });
-    if (!conv) throw Exceptions.notFound(ErrorCode.CONVERSATION_NOT_FOUND, "会话不存在");
+    if (!conv) throw Exceptions.notFound("会话不存在");
 
     // 确定父消息
     const parentId = dto.rootId
@@ -94,7 +94,7 @@ export class MessageService {
         role: "user",
         content: dto.content,
         messageType: dto.messageType ?? "text",
-        status: 1,
+        status: CommonStatus.NORMAL,
       },
     });
 
@@ -131,7 +131,7 @@ export class MessageService {
         reasoningContent,
         messageType: "text",
         tokenCount: tokenCount ?? 0,
-        status: 1,
+        status: CommonStatus.NORMAL,
       },
     });
   }
@@ -141,7 +141,7 @@ export class MessageService {
     const original = await this.prisma.chatMessage.findUnique({
       where: { id: messageId },
     });
-    if (!original) throw Exceptions.notFound(ErrorCode.MESSAGE_NOT_FOUND, "消息不存在");
+    if (!original) throw Exceptions.notFound("消息不存在");
 
     return this.prisma.chatMessage.create({
       data: {
@@ -152,7 +152,7 @@ export class MessageService {
         role: original.role,
         content: dto.content,
         messageType: original.messageType,
-        status: 1,
+        status: CommonStatus.NORMAL,
       },
     });
   }
@@ -163,7 +163,7 @@ export class MessageService {
       where: { id: messageId },
     });
     if (!msg || Number(msg.conversationId) !== conversationId) {
-      throw Exceptions.notFound(ErrorCode.MESSAGE_NOT_IN_CONVERSATION, "消息不属于该会话");
+      throw Exceptions.notFound("消息不属于该会话");
     }
 
     return this.prisma.chatConversation.update({
@@ -181,7 +181,7 @@ export class MessageService {
     const conv = await this.prisma.chatConversation.findUnique({
       where: { id: conversationId },
     });
-    if (!conv) throw Exceptions.notFound(ErrorCode.CONVERSATION_NOT_FOUND, "会话不存在");
+    if (!conv) throw Exceptions.notFound("会话不存在");
 
     // 1. 最新摘要
     const summary = await this.prisma.chatSummary.findFirst({
@@ -195,7 +195,7 @@ export class MessageService {
           where: {
             conversationId,
             id: { gt: summary.endMessageId },
-            status: 1,
+            status: CommonStatus.NORMAL,
           },
           orderBy: { createdAt: "asc" },
           select: { id: true, role: true, content: true, reasoningContent: true },
@@ -203,7 +203,7 @@ export class MessageService {
       : await this.prisma.chatMessage.findMany({
           where: {
             conversationId,
-            status: 1,
+            status: CommonStatus.NORMAL,
             id: { lte: userMessageId },
           },
           orderBy: { createdAt: "asc" },

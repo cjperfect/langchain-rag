@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Param, Body, Query, UseGuards, ParseIntPipe } from "@nestjs/common";
 import { MessageService } from "./message.service";
-import { SendMessageDto, EditMessageDto, SwitchBranchDto } from "./dto/message.dto";
+import type { SendMessageDto, EditMessageDto, SwitchBranchDto } from "./dto/message.dto";
 // TODO: 临时跳过登录校验
 // import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";

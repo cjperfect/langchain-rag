@@ -20,7 +20,11 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/index.ts
 var index_exports = {};
 __export(index_exports, {
-  AiEngine: () => AiEngine
+  AiEngine: () => AiEngine,
+  loadCsv: () => loadCsv,
+  loadMarkdown: () => loadMarkdown,
+  loadPdf: () => loadPdf,
+  loadText: () => loadText
 });
 module.exports = __toCommonJS(index_exports);
 var import_config = require("dotenv/config");
@@ -290,7 +294,10 @@ var AiEngine = class _AiEngine {
    */
   async *stream(input, options = {}) {
     const messages = [...toLangChainMessages(options.history ?? []), new import_messages2.HumanMessage(input)];
-    const stream = await this.getAgent(options.model).stream({ messages }, { streamMode: "messages" });
+    const stream = await this.getAgent(options.model).stream(
+      { messages },
+      { streamMode: "messages" }
+    );
     for await (const [chunk] of stream) {
       if (typeof chunk.content === "string") {
         yield chunk.content;
@@ -330,7 +337,44 @@ var AiEngine = class _AiEngine {
     }
   }
 };
+
+// src/loaders/csv.loader.ts
+var import_csv = require("@langchain/community/document_loaders/fs/csv");
+async function loadCsv(filePath, options) {
+  const loader = new import_csv.CSVLoader(filePath, options);
+  return loader.load();
+}
+
+// src/loaders/pdf.loader.ts
+var import_pdf = require("@langchain/community/document_loaders/fs/pdf");
+async function loadPdf(filePath, options) {
+  const loader = new import_pdf.PDFLoader(filePath, {
+    splitPages: options?.splitPages,
+    parsedItemSeparator: options?.parsedItemSeparator
+  });
+  return loader.load();
+}
+
+// src/loaders/text.loader.ts
+var import_fs = require("fs");
+var import_documents = require("@langchain/core/documents");
+async function loadText(filePath) {
+  const content = (0, import_fs.readFileSync)(filePath, "utf-8");
+  return [
+    new import_documents.Document({
+      pageContent: content,
+      metadata: { source: filePath }
+    })
+  ];
+}
+async function loadMarkdown(filePath) {
+  return loadText(filePath);
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
-  AiEngine
+  AiEngine,
+  loadCsv,
+  loadMarkdown,
+  loadPdf,
+  loadText
 });
