@@ -1,38 +1,22 @@
 "use client";
 
-import { useMemo, useCallback, useState, type FC } from "react";
-import { AssistantRuntimeProvider, useLocalRuntime } from "@assistant-ui/react";
-import { Thread } from "@/components/assistant-ui/thread";
-import { createKnowledgeChatAdapter } from "@/adapters/chat.adapter";
+import { useMemo, useState, type FC } from "react";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  AssistantRuntimeProvider,
+  useLocalRuntime,
+  useRemoteThreadListRuntime,
+} from "@assistant-ui/react";
+import { Thread } from "@/components/assistant-ui/thread";
+import { ThreadList } from "@/components/assistant-ui/thread-list";
+import { createKnowledgeChatAdapter } from "@/adapters/chat.adapter";
+import { createRemoteThreadListAdapter } from "@/adapters/remote-thread-list.adapter";
 import { Button } from "@/components/ui/button";
-import { Library, History, Plus, MessageSquare } from "lucide-react";
-import type { KbConversation, KnowledgeChatProps } from "@/interfaces/knowledge";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Library, History } from "lucide-react";
+import type { KnowledgeChatProps } from "@/interfaces/knowledge";
 
 // ---------------------------------------------------------------------------
-// 会话记录 mock（按知识库 ID 分组）
-// ---------------------------------------------------------------------------
-
-const mockConversations: Record<number, KbConversation[]> = {};
-
-function getOrCreateConversations(kbId: number): KbConversation[] {
-  if (!mockConversations[kbId]) {
-    mockConversations[kbId] = [
-      {
-        id: `${kbId}-default`,
-        title: "新会话",
-        updatedAt: new Date(),
-      },
-    ];
-  }
-  return mockConversations[kbId];
-}
-
+// 欢迎页
 // ---------------------------------------------------------------------------
 
 const KnowledgeChatWelcome: FC<{ kbName: string }> = ({ kbName }) => (
@@ -49,65 +33,56 @@ const KnowledgeChatWelcome: FC<{ kbName: string }> = ({ kbName }) => (
   </div>
 );
 
-export function KnowledgeChat({ knowledgeBaseId, knowledgeBaseName }: KnowledgeChatProps) {
-  const conversations = getOrCreateConversations(knowledgeBaseId);
-  const [activeConvId, setActiveConvId] = useState(conversations[0]?.id ?? "");
+// ---------------------------------------------------------------------------
 
-  const adapter = useMemo(
+export function KnowledgeChat({ knowledgeBaseId, knowledgeBaseName }: KnowledgeChatProps) {
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  const threadListAdapter = useMemo(
+    () =>
+      createRemoteThreadListAdapter({
+        knowledgeId: knowledgeBaseId,
+        defaultTitle: `知识库 - ${knowledgeBaseName}`,
+      }),
+    [knowledgeBaseId, knowledgeBaseName],
+  );
+
+  const chatAdapter = useMemo(
     () => createKnowledgeChatAdapter(knowledgeBaseId, knowledgeBaseName),
     [knowledgeBaseId, knowledgeBaseName],
   );
 
-  const runtime = useLocalRuntime(adapter);
+  const runtime = useRemoteThreadListRuntime({
+    adapter: threadListAdapter,
+    runtimeHook: () => useLocalRuntime(chatAdapter),
+  });
 
-  const Welcome = useCallback(() => <KnowledgeChatWelcome kbName={knowledgeBaseName} />, [knowledgeBaseName]);
-
+  const Welcome = useMemo(() => () => <KnowledgeChatWelcome kbName={knowledgeBaseName} />, [knowledgeBaseName]);
   const components = useMemo(() => ({ Welcome }), [Welcome]);
 
-  const handleNewConversation = () => {
-    const newConv: KbConversation = {
-      id: `${knowledgeBaseId}-${Date.now()}`,
-      title: "新会话",
-      updatedAt: new Date(),
-    };
-    conversations.unshift(newConv);
-    setActiveConvId(newConv.id);
-  };
-
   return (
-    <AssistantRuntimeProvider key={`${knowledgeBaseId}-${activeConvId}`} runtime={runtime}>
+    <AssistantRuntimeProvider runtime={runtime}>
       <div className="flex h-full flex-col bg-background">
         {/* 头部 */}
         <div className="flex shrink-0 items-center gap-2 border-b px-4 py-2.5">
           <Library className="size-4 text-primary" />
           <span className="flex-1 text-sm font-semibold">AI 问答</span>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+          <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+            <SheetTrigger asChild>
               <Button variant="ghost" size="icon" className="size-7">
                 <History className="size-4" />
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <div className="flex items-center justify-between px-2 py-1.5">
-                <span className="text-xs font-medium text-muted-foreground">历史会话</span>
-                <Button variant="ghost" size="icon" className="size-6" onClick={handleNewConversation}>
-                  <Plus className="size-3.5" />
-                </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="flex w-128 flex-col p-0">
+              <SheetHeader className="border-b px-4 py-3">
+                <SheetTitle className="text-sm">历史会话</SheetTitle>
+              </SheetHeader>
+              <div className="flex-1 overflow-y-auto px-2 py-1">
+                <ThreadList />
               </div>
-              {conversations.map((conv) => (
-                <DropdownMenuItem
-                  key={conv.id}
-                  onClick={() => setActiveConvId(conv.id)}
-                  className="flex items-center gap-2"
-                >
-                  <MessageSquare className="size-3.5 shrink-0" />
-                  <span className="flex-1 truncate text-sm">{conv.title}</span>
-                  {conv.id === activeConvId ? <span className="size-1.5 shrink-0 rounded-full bg-primary" /> : null}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+            </SheetContent>
+          </Sheet>
         </div>
 
         {/* 聊天区域 */}

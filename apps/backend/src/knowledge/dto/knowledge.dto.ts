@@ -12,3 +12,8 @@ export class CreateDocumentDto {
   fileName!: string;
   content!: string;
 }
+
+export class UpdateDocumentDto {
+  content?: string;
+  fileName?: string;
+}

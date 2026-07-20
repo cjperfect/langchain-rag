@@ -1,5 +1,4 @@
 import { ChatModelAdapter } from "@assistant-ui/react";
-import { post } from "@/lib/api";
 import { getConversationId } from "./remote-thread-list.adapter";
 import { knowledgeBaseRegistry } from "@/lib/knowledge-base-registry";
 import { atMentionFormatter } from "@/lib/directive-formatter";
@@ -146,28 +145,13 @@ export const chatAdapter: ChatModelAdapter = {
   },
 };
 
-export function createKnowledgeChatAdapter(knowledgeBaseId: number, knowledgeBaseName: string): ChatModelAdapter {
-  let conversationId: number | null = null;
-  let initPromise: Promise<void> | null = null;
-
-  const ensureConversation = async () => {
-    if (conversationId) return;
-    if (initPromise) {
-      await initPromise;
-      return;
-    }
-    initPromise = (async () => {
-      const conv = await post<{ id: number }>("/conversations", {
-        title: `知识库 - ${knowledgeBaseName}`,
-      });
-      conversationId = conv.id;
-    })();
-    await initPromise;
-  };
-
+export function createKnowledgeChatAdapter(
+  knowledgeBaseId: number,
+  _knowledgeBaseName: string,
+): ChatModelAdapter {
   return {
-    async *run({ messages, context }) {
-      await ensureConversation();
+    async *run({ messages, context, unstable_threadId }) {
+      const conversationId = getConversationId(unstable_threadId);
 
       const lastMessage = messages[messages.length - 1];
       const userMessage =
@@ -178,9 +162,9 @@ export function createKnowledgeChatAdapter(knowledgeBaseId: number, knowledgeBas
 
       const body: Record<string, unknown> = {
         prompt: userMessage,
-        chat_session_id: conversationId,
         knowledge_id: knowledgeBaseId,
       };
+      if (conversationId) body.chat_session_id = conversationId;
       if (context.config?.modelName) body.model = context.config.modelName;
 
       yield* streamChat(body);

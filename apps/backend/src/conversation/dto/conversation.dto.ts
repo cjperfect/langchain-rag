@@ -1,6 +1,7 @@
 export class CreateConversationDto {
   title?: string;
   systemPrompt?: string;
+  knowledgeId?: number;
 }
 
 export class UpdateConversationDto {

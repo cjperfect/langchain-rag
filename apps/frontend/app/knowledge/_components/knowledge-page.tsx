@@ -34,14 +34,17 @@ import {
 } from "@/api/knowledge-api";
 import type { KnowledgeBase, PageState } from "@/interfaces/knowledge";
 
-const KnowledgeChat = dynamic(() => import("./knowledge-chat").then((m) => ({ default: m.KnowledgeChat })), {
-  ssr: false,
-  loading: () => (
-    <div className="flex h-full items-center justify-center">
-      <Skeleton className="h-8 w-32" />
-    </div>
-  ),
-});
+const KnowledgeChat = dynamic(
+  () => import("./knowledge-chat").then((m) => ({ default: m.KnowledgeChat })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full items-center justify-center">
+        <Skeleton className="h-8 w-32" />
+      </div>
+    ),
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Component
@@ -55,7 +58,7 @@ const initialState: PageState = {
   docsLoading: false,
   searchQuery: "",
   selectedDoc: null,
-  docContent: [],
+  docContent: "",
   docContentLoading: false,
   dialogOpen: false,
   editingKb: null,
@@ -135,8 +138,8 @@ export function KnowledgePage() {
     (async () => {
       setState({ docContentLoading: true });
       try {
-        const docContent = await getDocumentContent(selectedKb.id, docId);
-        setState({ docContent });
+        const { content } = await getDocumentContent(selectedKb.id, docId);
+        setState({ docContent: content });
       } finally {
         setState({ docContentLoading: false });
       }
@@ -176,7 +179,9 @@ export function KnowledgePage() {
       await createKnowledgeBase(data);
     }
     const updated = await fetchKbList();
-    const target = editingKb ? (updated.find((k) => k.id === editingKb.id) ?? updated[0]) : updated[0];
+    const target = editingKb
+      ? (updated.find((k) => k.id === editingKb.id) ?? updated[0])
+      : updated[0];
     if (target) {
       setState({ selectedKb: target, docsLoading: true });
       const docs = await getDocuments(target.id);
@@ -189,7 +194,8 @@ export function KnowledgePage() {
   const handleEdit = (kb: KnowledgeBase) => setState({ editingKb: kb, dialogOpen: true });
 
   // 删除
-  const handleDeleteClick = (kb: KnowledgeBase) => setState({ deleteTarget: kb, deleteDialogOpen: true });
+  const handleDeleteClick = (kb: KnowledgeBase) =>
+    setState({ deleteTarget: kb, deleteDialogOpen: true });
 
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
@@ -262,7 +268,19 @@ export function KnowledgePage() {
                     <span className="text-xs text-muted-foreground">{selectedKb.name}</span>
                   </div>
                   <div className="flex-1 overflow-hidden">
-                    <DocumentViewer content={docContent} fileName={selectedDoc.fileName} loading={docContentLoading} />
+                    <DocumentViewer
+                      content={docContent}
+                      fileName={selectedDoc.fileName}
+                      loading={docContentLoading}
+                      knowledgeBaseId={selectedKb.id}
+                      documentId={selectedDoc.id}
+                      onSaved={() => {
+                        // 重新加载文档内容
+                        getDocumentContent(selectedKb.id, selectedDoc.id).then(({ content }) =>
+                          setState({ docContent: content }),
+                        );
+                      }}
+                    />
                   </div>
                 </div>
               ) : (
@@ -298,7 +316,11 @@ export function KnowledgePage() {
                       </Button>
                     </div>
                     <span className="ml-1 shrink-0 text-xs text-muted-foreground">
-                      {docsLoading ? <Skeleton className="inline-block h-3 w-8" /> : `${documents.length} 个文件`}
+                      {docsLoading ? (
+                        <Skeleton className="inline-block h-3 w-8" />
+                      ) : (
+                        `${documents.length} 个文件`
+                      )}
                     </span>
                   </div>
                   <div className="flex-1 overflow-y-auto">
@@ -316,7 +338,7 @@ export function KnowledgePage() {
             <Separator className="bg-border data-[resize-handle-active]:bg-primary/40 transition-colors" />
 
             {/* 右栏：AI 聊天 */}
-            <Panel defaultSize={30} minSize={15}>
+            <Panel defaultSize={40} minSize={20}>
               <KnowledgeChat
                 key={selectedKb?.id ?? "empty"}
                 knowledgeBaseId={selectedKb?.id ?? 0}
@@ -347,7 +369,8 @@ export function KnowledgePage() {
           <DialogHeader>
             <DialogTitle>确认删除</DialogTitle>
             <DialogDescription>
-              确定要删除知识库「{deleteTarget?.name}」吗？此操作不可撤销，知识库内的所有文档将被一并删除。
+              确定要删除知识库「{deleteTarget?.name}
+              」吗？此操作不可撤销，知识库内的所有文档将被一并删除。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">

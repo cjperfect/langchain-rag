@@ -17,11 +17,14 @@ model ChatConversation {
 
   status Int @default(1) @db.SmallInt
 
+  knowledgeId Int? @map("knowledge_id")
+
   lastMessageAt DateTime? @map("last_message_at")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at")
 
   user           User              @relation(fields: [userId], references: [id])
+  knowledge      KnowledgeBase?    @relation(fields: [knowledgeId], references: [id], onDelete: Cascade)
   currentMessage ChatMessage?      @relation("CurrentMessage", fields: [currentMessageId], references: [id])
   messages       ChatMessage[]
   summaries      ChatSummary[]

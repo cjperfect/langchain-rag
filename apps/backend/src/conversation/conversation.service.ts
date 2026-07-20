@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { Prisma } from "@prisma/client";
 import { Exceptions } from "../common/exceptions/business.exception";
 import { ErrorCode } from "@langchain-rag/shared";
 import { AiEngine } from "@langchain-rag/ai-engine";
@@ -22,14 +23,23 @@ export class ConversationService {
         userId,
         title: dto.title,
         systemPrompt: dto.systemPrompt,
+        knowledgeId: dto.knowledgeId,
       },
     });
   }
 
-  /** 获取用户会话列表 */
-  async list(userId: number) {
+  /** 获取用户会话列表（可按知识库筛选） */
+  async list(userId: number, knowledgeId?: number) {
+    const where: Prisma.ChatConversationWhereInput = {
+      userId,
+      status: { in: [1, 2] },
+    };
+    if (knowledgeId !== undefined) {
+      where.knowledgeId = knowledgeId;
+    }
+
     return this.prisma.chatConversation.findMany({
-      where: { userId, status: { in: [1, 2] } }, // 正常 + 归档
+      where,
       orderBy: { lastMessageAt: "desc" },
       select: {
         id: true,
@@ -40,6 +50,10 @@ export class ConversationService {
         branchCount: true,
         lastMessageAt: true,
         createdAt: true,
+        knowledgeId: true,
+        knowledge: {
+          select: { name: true },
+        },
       },
     });
   }
@@ -92,7 +106,8 @@ export class ConversationService {
     const conv = await this.get(conversationId);
 
     // 已有非默认标题则跳过
-    if (conv.title && conv.title !== "新会话") {
+    const isDefaultTitle = !conv.title || conv.title === "新会话" || conv.title.startsWith("知识库 - ");
+    if (!isDefaultTitle) {
       return { title: conv.title };
     }
 

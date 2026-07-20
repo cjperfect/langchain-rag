@@ -6,6 +6,7 @@ import {
   Delete,
   Param,
   Body,
+  Query,
   UseGuards,
   ParseIntPipe,
 } from "@nestjs/common";
@@ -27,8 +28,11 @@ export class ConversationController {
   }
 
   @Get()
-  async list(@CurrentUser() user: { id: number }) {
-    return this.conversationService.list(user.id);
+  async list(
+    @CurrentUser() user: { id: number },
+    @Query("knowledge_id") knowledgeId?: string,
+  ) {
+    return this.conversationService.list(user.id, knowledgeId ? Number(knowledgeId) : undefined);
   }
 
   @Get(":id")

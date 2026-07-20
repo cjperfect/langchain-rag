@@ -48,6 +48,10 @@ export interface ConversationItem {
   lastMessageAt: string | null;
   /** 创建时间 */
   createdAt: string;
+  /** 关联知识库 ID（null = 普通会话） */
+  knowledgeId?: number | null;
+  /** 知识库名称（后端 join 返回） */
+  knowledge?: { name: string } | null;
 }
 
 /** 后端返回的消息记录 */

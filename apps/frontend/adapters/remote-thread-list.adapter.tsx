@@ -99,78 +99,98 @@ const toMetadata = (c: ConversationItem): RemoteThreadMetadata => ({
     messageCount: c.messageCount,
     totalTokens: c.totalTokens,
     branchCount: c.branchCount,
+    knowledgeId: c.knowledgeId,
+    knowledgeName: c.knowledge?.name ?? null,
   },
 });
 
 // ---------------------------------------------------------------------------
-// Adapter
+// Adapter factory
 // ---------------------------------------------------------------------------
-export const remoteThreadListAdapter: RemoteThreadListAdapter = {
-  /** 为每个活跃线程注入历史消息加载能力 */
-  unstable_Provider: HistoryProvider,
 
-  /** 获取会话列表 */
-  async list(): Promise<RemoteThreadListResponse> {
-    const data = await get<ConversationItem[]>("/conversations");
-    return { threads: data.map(toMetadata) };
-  },
+export function createRemoteThreadListAdapter(options?: {
+  knowledgeId?: number;
+  defaultTitle?: string;
+}): RemoteThreadListAdapter {
+  const knowledgeId = options?.knowledgeId;
+  const defaultTitle = options?.defaultTitle ?? "新会话";
 
-  /** 新建会话 → POST /api/conversations */
-  async initialize(_threadId: string): Promise<{ remoteId: string; externalId: string | undefined }> {
-    const conv = await post<ConversationItem>("/conversations", { title: "新会话" });
-    lastCreatedId = conv.id;
-    return { remoteId: String(conv.id), externalId: undefined };
-  },
+  return {
+    /** 为每个活跃线程注入历史消息加载能力 */
+    unstable_Provider: HistoryProvider,
 
-  /** 获取单个会话元数据 */
-  async fetch(threadId: string): Promise<RemoteThreadMetadata> {
-    const id = parseInt(threadId, 10);
-    const conv = await get<ConversationItem>(`/conversations/${id}`);
-    return toMetadata(conv);
-  },
+    /** 获取会话列表 */
+    async list(): Promise<RemoteThreadListResponse> {
+      const url = knowledgeId != null
+        ? `/conversations?knowledge_id=${knowledgeId}`
+        : "/conversations";
+      const data = await get<ConversationItem[]>(url);
+      return { threads: data.map(toMetadata) };
+    },
 
-  /** 重命名 */
-  async rename(remoteId: string, newTitle: string): Promise<void> {
-    await patch(`/conversations/${remoteId}`, { title: newTitle });
-  },
+    /** 新建会话 → POST /api/conversations */
+    async initialize(_threadId: string): Promise<{ remoteId: string; externalId: string | undefined }> {
+      const body: Record<string, unknown> = { title: defaultTitle };
+      if (knowledgeId && knowledgeId > 0) body.knowledgeId = knowledgeId;
+      console.log("[initialize] body:", JSON.stringify(body), "knowledgeId:", knowledgeId);
+      const conv = await post<ConversationItem>("/conversations", body);
+      lastCreatedId = conv.id;
+      return { remoteId: String(conv.id), externalId: undefined };
+    },
 
-  /** 删除 */
-  async delete(remoteId: string): Promise<void> {
-    await del(`/conversations/${remoteId}`);
-  },
+    /** 获取单个会话元数据 */
+    async fetch(threadId: string): Promise<RemoteThreadMetadata> {
+      const id = parseInt(threadId, 10);
+      const conv = await get<ConversationItem>(`/conversations/${id}`);
+      return toMetadata(conv);
+    },
 
-  async generateTitle(remoteId: string, _unstable_messages): Promise<import("assistant-stream").AssistantStream> {
-    const messagesForBackend = _unstable_messages.map((m) => ({
-      role: m.role,
-      content: m.content
-        .filter((p): p is { type: "text"; text: string } => p.type === "text")
-        .map((p) => p.text)
-        .join(" "),
-    }));
+    /** 重命名 */
+    async rename(remoteId: string, newTitle: string): Promise<void> {
+      await patch(`/conversations/${remoteId}`, { title: newTitle });
+    },
 
-    try {
-      const { title } = await post<{ title: string }>(`/conversations/${remoteId}/generate-title`, {
-        messages: messagesForBackend,
-      });
-      if (title) {
-        return createAssistantStream((controller) => {
-          controller.appendText(title);
+    /** 删除 */
+    async delete(remoteId: string): Promise<void> {
+      await del(`/conversations/${remoteId}`);
+    },
+
+    async generateTitle(remoteId: string, _unstable_messages): Promise<import("assistant-stream").AssistantStream> {
+      const messagesForBackend = _unstable_messages.map((m) => ({
+        role: m.role,
+        content: m.content
+          .filter((p): p is { type: "text"; text: string } => p.type === "text")
+          .map((p) => p.text)
+          .join(" "),
+      }));
+
+      try {
+        const { title } = await post<{ title: string }>(`/conversations/${remoteId}/generate-title`, {
+          messages: messagesForBackend,
         });
+        if (title) {
+          return createAssistantStream((controller) => {
+            controller.appendText(title);
+          });
+        }
+      } catch {
+        /* 后端已处理所有 fallback，这里忽略 */
       }
-    } catch {
-      /* 后端已处理所有 fallback，这里忽略 */
-    }
 
-    return createAssistantStream((_controller) => {});
-  },
+      return createAssistantStream((_controller) => {});
+    },
 
-  /** 归档 — 暂不启用 */
-  async archive(_remoteId: string): Promise<void> {
-    // no-op
-  },
+    /** 归档 — 暂不启用 */
+    async archive(_remoteId: string): Promise<void> {
+      // no-op
+    },
 
-  /** 取消归档 */
-  async unarchive(_remoteId: string): Promise<void> {
-    // no-op
-  },
-};
+    /** 取消归档 */
+    async unarchive(_remoteId: string): Promise<void> {
+      // no-op
+    },
+  };
+}
+
+/** 首页会话适配器（无筛选） */
+export const remoteThreadListAdapter = createRemoteThreadListAdapter();

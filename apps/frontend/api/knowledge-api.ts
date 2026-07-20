@@ -64,6 +64,13 @@ export async function getDocuments(knowledgeBaseId: number): Promise<KnowledgeBa
 export async function getDocumentContent(
   knowledgeBaseId: number,
   documentId: number,
+): Promise<{ content: string }> {
+  return get<{ content: string }>(`/knowledge/${knowledgeBaseId}/documents/${documentId}/content`);
+}
+
+export async function getDocumentChunks(
+  knowledgeBaseId: number,
+  documentId: number,
 ): Promise<DocumentChunk[]> {
   return get<DocumentChunk[]>(`/knowledge/${knowledgeBaseId}/documents/${documentId}/chunks`);
 }
@@ -94,4 +101,16 @@ export async function uploadDocument(
 
   const json = await res.json();
   return json.data;
+}
+
+export async function updateDocument(
+  kbId: number,
+  docId: number,
+  input: { content?: string; fileName?: string },
+): Promise<KnowledgeBaseDocument> {
+  return patch<KnowledgeBaseDocument>(`/knowledge/${kbId}/documents/${docId}`, input);
+}
+
+export async function deleteDocument(kbId: number, docId: number): Promise<void> {
+  return del<void>(`/knowledge/${kbId}/documents/${docId}`);
 }

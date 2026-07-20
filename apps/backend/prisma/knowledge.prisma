@@ -19,6 +19,7 @@ model KnowledgeBase {
 
   user      User                 @relation(fields: [userId], references: [id])
   documents KnowledgeDocument[]
+  conversations ChatConversation[]
 
   @@index([userId, updatedAt(sort: Desc)])
   @@index([status])

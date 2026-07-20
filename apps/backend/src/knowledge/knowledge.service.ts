@@ -6,6 +6,7 @@ import type {
   CreateKnowledgeBaseDto,
   UpdateKnowledgeBaseDto,
   CreateDocumentDto,
+  UpdateDocumentDto,
 } from "./dto/knowledge.dto";
 
 /**
@@ -80,6 +81,11 @@ export class KnowledgeService {
       where: { knowledgeBaseId: id },
       data: { status: 3 },
     });
+    // 级联软删该知识库下的所有会话
+    await this.prisma.chatConversation.updateMany({
+      where: { knowledgeId: id },
+      data: { status: 3 },
+    });
     return this.prisma.knowledgeBase.update({
       where: { id },
       data: { status: 3 },
@@ -146,6 +152,15 @@ export class KnowledgeService {
   }
 
   /** 获取文档切片 */
+  /** 获取文档完整文本内容 */
+  async getDocumentContent(docId: number) {
+    const chunks = await this.prisma.knowledgeChunk.findMany({
+      where: { documentId: docId },
+      orderBy: { index: "asc" },
+    });
+    return { content: chunks.map((c) => c.content).join("\n\n") };
+  }
+
   async getDocumentChunks(docId: number) {
     return this.prisma.knowledgeChunk.findMany({
       where: { documentId: docId },
@@ -202,12 +217,59 @@ export class KnowledgeService {
     return doc;
   }
 
+  /** 更新文档内容（重新切片） */
+  async updateDocument(docId: number, userId: number, dto: UpdateDocumentDto) {
+    const doc = await this.prisma.knowledgeDocument.findUnique({ where: { id: docId } });
+    if (!doc) throw Exceptions.notFound(ErrorCode.DOCUMENT_NOT_FOUND, "文档不存在");
+
+    const updateData: Record<string, unknown> = {};
+    if (dto.fileName !== undefined) updateData.fileName = dto.fileName;
+
+    if (dto.content !== undefined) {
+      const chunks = splitTextToChunks(dto.content);
+      const fileSize = Buffer.byteLength(dto.content, "utf-8");
+
+      // 删除旧切片
+      await this.prisma.knowledgeChunk.deleteMany({ where: { documentId: docId } });
+
+      // 写入新切片
+      if (chunks.length > 0) {
+        await this.prisma.knowledgeChunk.createMany({
+          data: chunks.map((content, index) => ({
+            documentId: docId,
+            kbId: doc.knowledgeBaseId,
+            index,
+            content,
+            tokenCount: Math.ceil(content.length / 3),
+          })),
+        });
+      }
+
+      updateData.content = dto.content;
+      updateData.fileSize = fileSize;
+      updateData.chunkCount = chunks.length;
+
+      // 更新知识库切片计数
+      await this.prisma.knowledgeBase.update({
+        where: { id: doc.knowledgeBaseId },
+        data: {
+          chunkCount: { increment: chunks.length - doc.chunkCount },
+        },
+      });
+    }
+
+    return this.prisma.knowledgeDocument.update({
+      where: { id: docId },
+      data: updateData,
+    });
+  }
+
   /** 软删除文档 */
   async deleteDocument(docId: number, userId: number) {
     const doc = await this.prisma.knowledgeDocument.findUnique({ where: { id: docId } });
     if (!doc) throw Exceptions.notFound(ErrorCode.DOCUMENT_NOT_FOUND, "文档不存在");
 
-    // 级联软删切片
+    // 切片没有 status 字段，直接物理删除（文档恢复后需重新解析）
     await this.prisma.knowledgeChunk.deleteMany({ where: { documentId: docId } });
 
     // 更新知识库计数
@@ -219,6 +281,9 @@ export class KnowledgeService {
       },
     });
 
-    return this.prisma.knowledgeDocument.delete({ where: { id: docId } });
+    return this.prisma.knowledgeDocument.update({
+      where: { id: docId },
+      data: { status: 3 },
+    });
   }
 }

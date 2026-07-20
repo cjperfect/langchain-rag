@@ -13,7 +13,7 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { KnowledgeService } from "./knowledge.service";
-import { CreateKnowledgeBaseDto, UpdateKnowledgeBaseDto, CreateDocumentDto } from "./dto/knowledge.dto";
+import { CreateKnowledgeBaseDto, UpdateKnowledgeBaseDto, CreateDocumentDto, UpdateDocumentDto } from "./dto/knowledge.dto";
 // TODO: 临时跳过登录校验
 // import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
@@ -93,12 +93,30 @@ export class KnowledgeController {
     });
   }
 
+  @Get(":id/documents/:docId/content")
+  async getDocumentContent(
+    @Param("id", ParseIntPipe) _id: number,
+    @Param("docId", ParseIntPipe) docId: number,
+  ) {
+    return this.knowledgeService.getDocumentContent(docId);
+  }
+
   @Get(":id/documents/:docId/chunks")
   async getDocumentChunks(
     @Param("id", ParseIntPipe) _id: number,
     @Param("docId", ParseIntPipe) docId: number,
   ) {
     return this.knowledgeService.getDocumentChunks(docId);
+  }
+
+  @Patch(":id/documents/:docId")
+  async updateDocument(
+    @Param("id", ParseIntPipe) _id: number,
+    @Param("docId", ParseIntPipe) docId: number,
+    @CurrentUser() user: { id: number },
+    @Body() dto: UpdateDocumentDto,
+  ) {
+    return this.knowledgeService.updateDocument(docId, user.id, dto);
   }
 
   @Delete(":id/documents/:docId")

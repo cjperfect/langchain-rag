@@ -109,15 +109,19 @@ export const ThreadListItems: FC<ComponentPropsWithoutRef<"div"> & { searchQuery
   );
 };
 
-const DAY_IN_MS = 86_400_000;
+type ThreadListGroup = { label: string; sortKey?: number; indices: number[] };
 
-const dateGroupLabel = (date: Date | undefined, startOfToday: number): string => {
-  if (!date || date.getTime() >= startOfToday) return "今天";
-  if (date.getTime() >= startOfToday - DAY_IN_MS) return "昨天";
-  return "更早";
+/** 获取线程所属的分类标签和排序键 */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const categoryOf = (item: any): { label: string; sortKey: number } => {
+  const custom = item?.custom as { knowledgeId?: number | null; knowledgeName?: string | null } | undefined;
+  if (custom?.knowledgeId != null) {
+    // 知识库会话按名称分组，sortKey 用知识库 ID 保证同知识库的在一起
+    return { label: `📚 ${custom.knowledgeName ?? "知识库"}`, sortKey: custom.knowledgeId };
+  }
+  // 首页会话
+  return { label: "🏠 首页会话", sortKey: -1 };
 };
-
-type ThreadListGroup = { label: string; indices: number[] };
 
 const ThreadListItemGroups: FC<{ searchQuery?: string }> = ({ searchQuery = "" }) => {
   const threadIds = useAuiState((s) => s.threads.threadIds);
@@ -127,30 +131,38 @@ const ThreadListItemGroups: FC<{ searchQuery?: string }> = ({ searchQuery = "" }
 
   const { filteredIndices, groups } = useMemo(() => {
     const itemsById = new Map(threadItems.map((item) => [item.id, item]));
-    const dates = threadIds.map((id) => itemsById.get(id)?.lastMessageAt);
     const filteredIndices = threadIds
       .map((id, index) => ({ id, index }))
       .filter(
-        ({ id }) => !query || (itemsById.get(id)?.title || "新会话").toLowerCase().includes(query),
+        ({ id }) => !query || (itemsById.get(id)?.title ?? "新会话").toLowerCase().includes(query),
       )
       .map(({ index }) => index);
-    if (!filteredIndices.some((index) => dates[index])) {
-      return { filteredIndices, groups: null };
-    }
 
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const time = (index: number) => dates[index]?.getTime() ?? Number.MAX_SAFE_INTEGER;
-    const sorted = [...filteredIndices].sort((a, b) => time(b) - time(a));
+    if (filteredIndices.length === 0) return { filteredIndices, groups: [] };
 
+    // 按 knowledgeId + lastMessageAt 排序
+    const sorted = [...filteredIndices].sort((a, b) => {
+      const itemA = itemsById.get(threadIds[a]);
+      const itemB = itemsById.get(threadIds[b]);
+      const catA = categoryOf(itemA);
+      const catB = categoryOf(itemB);
+      // 先按分类排序（首页在前，然后按知识库 ID）
+      if (catA.sortKey !== catB.sortKey) return catA.sortKey - catB.sortKey;
+      // 同类内按时间倒序
+      const timeA = itemA?.lastMessageAt?.getTime() ?? 0;
+      const timeB = itemB?.lastMessageAt?.getTime() ?? 0;
+      return timeB - timeA;
+    });
+
+    // 按分类标签分组
     const result: ThreadListGroup[] = [];
     for (const index of sorted) {
-      const label = dateGroupLabel(dates[index], startOfToday);
+      const cat = categoryOf(itemsById.get(threadIds[index]));
       const lastGroup = result[result.length - 1];
-      if (lastGroup?.label === label) {
+      if (lastGroup?.label === cat.label) {
         lastGroup.indices.push(index);
       } else {
-        result.push({ label, indices: [index] });
+        result.push({ label: cat.label, sortKey: cat.sortKey, indices: [index] });
       }
     }
     return { filteredIndices, groups: result };
@@ -162,16 +174,6 @@ const ThreadListItemGroups: FC<{ searchQuery?: string }> = ({ searchQuery = "" }
         未找到会话
       </div>
     );
-  }
-
-  if (!groups) {
-    return filteredIndices.map((index) => (
-      <ThreadListPrimitive.ItemByIndex
-        key={threadIds[index]}
-        index={index}
-        components={{ ThreadListItem }}
-      />
-    ));
   }
 
   return groups.map((group) => (

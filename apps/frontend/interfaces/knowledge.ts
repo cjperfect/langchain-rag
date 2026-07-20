@@ -78,16 +78,6 @@ export interface DocumentChunk {
   tokenCount: number;
 }
 
-/** 知识库聊天会话 */
-export interface KbConversation {
-  /** 会话 ID */
-  id: string;
-  /** 会话标题 */
-  title: string;
-  /** 最后更新时间 */
-  updatedAt: Date;
-}
-
 // ============================================================================
 // 页面状态
 // ============================================================================
@@ -108,8 +98,8 @@ export interface PageState {
   searchQuery: string;
   /** 当前选中的文档 */
   selectedDoc: KnowledgeBaseDocument | null;
-  /** 当前文档的内容（多个切片拼接） */
-  docContent: DocumentChunk[];
+  /** 当前文档的完整内容 */
+  docContent: string;
   /** 文档内容是否加载中 */
   docContentLoading: boolean;
   /** 新建/编辑对话框是否打开 */
@@ -162,12 +152,18 @@ export interface DocumentListProps {
 
 /** DocumentViewer 组件 Props */
 export interface DocumentViewerProps {
-  /** 文档内容（切片拼接为全文展示） */
-  content: DocumentChunk[];
+  /** 文档完整文本内容 */
+  content: string | null;
   /** 文件名（null 时不展示内容） */
   fileName: string | null;
   /** 是否加载中 */
   loading: boolean;
+  /** 知识库 ID（编辑模式需要） */
+  knowledgeBaseId?: number;
+  /** 文档 ID（编辑模式需要） */
+  documentId?: number;
+  /** 保存后的回调 */
+  onSaved?: () => void;
 }
 
 /** KnowledgeChat 组件 Props */
