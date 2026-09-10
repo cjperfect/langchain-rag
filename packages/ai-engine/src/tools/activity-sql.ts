@@ -1,12 +1,7 @@
 // 获取运营活动的SQL工具
 import { tool } from "langchain";
 import { z } from "zod";
-import {
-  buildDeleteAccountSQL,
-  buildModifyGameCountSQL,
-  buildModifyLotteryAndScoreSQL,
-  buildModifyUserPointsSQL,
-} from "../libs/generateSQL";
+import { buildDeleteAccountSQL, buildModifyGameCountSQL, buildModifyLotteryAndScoreSQL, buildModifyUserPointsSQL } from "../libs/generateSQL";
 
 // 定义SQL输入参数，包含手机号和时间
 export const sqlInputSchema = z.object({
@@ -18,17 +13,15 @@ export const sqlInputSchema = z.object({
 - 2026/7/6
 - 2026年7月6日
 `),
-  operationType: z
-    .enum(["modify_game_count", "modify_lottery_and_score", "modify_user_points", "delete_account"])
-    .describe(
-      `
+  operationType: z.enum(["modify_game_count", "modify_lottery_and_score", "modify_user_points", "delete_account"]).describe(
+    `
 操作类型:
 modify_game_count=修改游戏次数
 modify_lottery_and_score=修改抽奖次数和活动分数
 modify_user_points=修改用户积分
 delete_account=删除账号信息
 `,
-    ),
+  ),
 });
 
 export const activitySqlTool = tool(

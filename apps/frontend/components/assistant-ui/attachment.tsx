@@ -70,10 +70,7 @@ const AttachmentPreviewDialog: FC<PropsWithChildren> = ({ children }) => {
 
   return (
     <Dialog>
-      <DialogTrigger
-        className="aui-attachment-preview-trigger hover:bg-accent/50 cursor-pointer transition-colors"
-        asChild
-      >
+      <DialogTrigger className="aui-attachment-preview-trigger hover:bg-accent/50 cursor-pointer transition-colors" asChild>
         {children}
       </DialogTrigger>
       <DialogContent className="aui-attachment-preview-dialog-content [&>button]:bg-foreground/60 [&_svg]:text-background [&>button]:hover:[&_svg]:text-destructive p-2 sm:max-w-3xl [&>button]:rounded-full [&>button]:p-1 [&>button]:opacity-100 [&>button]:ring-0!">
@@ -119,27 +116,16 @@ const AttachmentUI: FC = () => {
   });
 
   const uploadState = useAuiState((s) =>
-    s.attachment.status.type === "running"
-      ? "uploading"
-      : s.attachment.status.type === "incomplete" && s.attachment.status.reason === "error"
-        ? "error"
-        : undefined,
+    s.attachment.status.type === "running" ? "uploading" : s.attachment.status.type === "incomplete" && s.attachment.status.reason === "error" ? "error" : undefined,
   );
   const isUploading = uploadState === "uploading";
   const isError = uploadState === "error";
 
-  const errorMessage = useAuiState((s) =>
-    s.attachment.status.type === "incomplete" && s.attachment.status.reason === "error" ? "上传失败" : undefined,
-  );
+  const errorMessage = useAuiState((s) => (s.attachment.status.type === "incomplete" && s.attachment.status.reason === "error" ? "上传失败" : undefined));
 
   return (
     <Tooltip>
-      <AttachmentPrimitive.Root
-        className={cn(
-          "aui-attachment-root relative",
-          isImage && !isComposer && "aui-attachment-root-message only:*:first:size-24",
-        )}
-      >
+      <AttachmentPrimitive.Root className={cn("aui-attachment-root relative", isImage && !isComposer && "aui-attachment-root-message only:*:first:size-24")}>
         <AttachmentPreviewDialog>
           <TooltipTrigger asChild>
             <div
@@ -153,18 +139,12 @@ const AttachmentUI: FC = () => {
             >
               <AttachmentThumb />
               {isUploading && (
-                <div
-                  aria-hidden="true"
-                  className="aui-attachment-tile-uploading bg-background/60 absolute inset-0 flex items-center justify-center backdrop-blur-[1px]"
-                >
+                <div aria-hidden="true" className="aui-attachment-tile-uploading bg-background/60 absolute inset-0 flex items-center justify-center backdrop-blur-[1px]">
                   <Loader2Icon className="text-muted-foreground size-5 animate-spin" />
                 </div>
               )}
               {isError && (
-                <div
-                  aria-hidden="true"
-                  className="aui-attachment-tile-error bg-destructive/10 absolute inset-0 flex items-center justify-center"
-                >
+                <div aria-hidden="true" className="aui-attachment-tile-error bg-destructive/10 absolute inset-0 flex items-center justify-center">
                   <AlertCircleIcon className="text-destructive size-5" />
                 </div>
               )}

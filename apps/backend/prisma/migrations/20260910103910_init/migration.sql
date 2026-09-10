@@ -9,6 +9,7 @@ CREATE TABLE "chat_conversation" (
     "total_tokens" INTEGER NOT NULL DEFAULT 0,
     "branch_count" INTEGER NOT NULL DEFAULT 1,
     "status" SMALLINT NOT NULL DEFAULT 1,
+    "knowledge_id" INTEGER,
     "last_message_at" TIMESTAMP(3),
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -275,6 +276,9 @@ CREATE UNIQUE INDEX "user_email_key" ON "user"("email");
 
 -- AddForeignKey
 ALTER TABLE "chat_conversation" ADD CONSTRAINT "chat_conversation_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "chat_conversation" ADD CONSTRAINT "chat_conversation_knowledge_id_fkey" FOREIGN KEY ("knowledge_id") REFERENCES "knowledge_base"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "chat_conversation" ADD CONSTRAINT "chat_conversation_current_message_id_fkey" FOREIGN KEY ("current_message_id") REFERENCES "chat_message"("id") ON DELETE SET NULL ON UPDATE CASCADE;

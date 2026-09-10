@@ -80,12 +80,9 @@ async function* streamChat(body: Record<string, unknown>) {
         }
         case "knowledge_search": {
           // 优先用后端下发的 kbNames，回退到本地 registry 查询
-          const kbNames =
-            (d.kbNames as string[])?.length
-              ? (d.kbNames as string[])
-              : ((d.kbIds ?? []) as number[])
-                  .map((id: number) => knowledgeBaseRegistry.getName(id))
-                  .filter(Boolean);
+          const kbNames = (d.kbNames as string[])?.length
+            ? (d.kbNames as string[])
+            : ((d.kbIds ?? []) as number[]).map((id: number) => knowledgeBaseRegistry.getName(id)).filter(Boolean);
           // 在助手回复正文顶部显示知识来源（仅首次，避免重复插入）
           if (!fullText && kbNames.length > 0) {
             fullText = `> 📚 知识来源：**${kbNames.join("、")}**\n\n`;
@@ -153,10 +150,7 @@ export const chatAdapter: ChatModelAdapter = {
   },
 };
 
-export function createKnowledgeChatAdapter(
-  knowledgeBaseId: number,
-  _knowledgeBaseName: string,
-): ChatModelAdapter {
+export function createKnowledgeChatAdapter(knowledgeBaseId: number, _knowledgeBaseName: string): ChatModelAdapter {
   return {
     async *run({ messages, context, unstable_threadId }) {
       const conversationId = getConversationId(unstable_threadId);

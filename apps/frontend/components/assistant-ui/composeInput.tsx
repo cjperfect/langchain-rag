@@ -63,13 +63,7 @@ export function ComposerInput() {
         aria-label="消息输入框"
       />
 
-      <ComposerTriggerPopover
-        char="@"
-        {...mention}
-        emptyItemsLabel="暂无知识库"
-        fallbackIcon={LibraryIcon}
-        iconMap={{ Library: LibraryIcon }}
-      />
+      <ComposerTriggerPopover char="@" {...mention} emptyItemsLabel="暂无知识库" fallbackIcon={LibraryIcon} iconMap={{ Library: LibraryIcon }} />
     </ComposerPrimitive.Unstable_TriggerPopoverRoot>
   );
 }

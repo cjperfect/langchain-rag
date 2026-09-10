@@ -1,19 +1,9 @@
 "use client";
 
-import {
-  ComposerAddAttachment,
-  ComposerAttachments,
-  UserMessageAttachments,
-} from "@/components/assistant-ui/attachment";
+import { ComposerAddAttachment, ComposerAttachments, UserMessageAttachments } from "@/components/assistant-ui/attachment";
 
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
-import {
-  Reasoning,
-  ReasoningContent,
-  ReasoningRoot,
-  ReasoningText,
-  ReasoningTrigger,
-} from "@/components/assistant-ui/reasoning";
+import { Reasoning, ReasoningContent, ReasoningRoot, ReasoningText, ReasoningTrigger } from "@/components/assistant-ui/reasoning";
 import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
 import { ToolGroupContent, ToolGroupRoot, ToolGroupTrigger } from "@/components/assistant-ui/tool-group";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
@@ -83,8 +73,7 @@ export const ThreadEnableMentionsContext = createContext<boolean>(true);
 
 // Startup exposes a loading placeholder thread; treat it as a new chat so
 // the composer mounts centered. Loads after startup keep the docked layout.
-const isNewChatView = (s: AssistantState) =>
-  s.thread.messages.length === 0 && (!s.thread.isLoading || s.threads.isLoading);
+const isNewChatView = (s: AssistantState) => s.thread.messages.length === 0 && (!s.thread.isLoading || s.threads.isLoading);
 
 export const Thread: FC<ThreadProps> = ({ components = EMPTY_COMPONENTS, enableMentions = true }) => {
   const isEmpty = useAuiState(isNewChatView);
@@ -111,17 +100,8 @@ const ThreadRoot: FC<{ isEmpty: boolean }> = ({ isEmpty }) => {
         ["--composer-padding" as string]: "8px",
       }}
     >
-      <ThreadPrimitive.Viewport
-        turnAnchor="top"
-        data-slot="aui_thread-viewport"
-        className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth"
-      >
-        <div
-          className={cn(
-            "mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4",
-            isEmpty && "justify-center",
-          )}
-        >
+      <ThreadPrimitive.Viewport turnAnchor="top" data-slot="aui_thread-viewport" className="relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll scroll-smooth">
+        <div className={cn("mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4", isEmpty && "justify-center")}>
           <AuiIf condition={isNewChatView}>
             <Welcome />
           </AuiIf>
@@ -172,9 +152,7 @@ const ThreadScrollToBottom: FC = () => {
 const ThreadWelcome: FC = () => {
   return (
     <div className="aui-thread-welcome-root mb-6 flex flex-col items-center px-4 text-center">
-      <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-semibold duration-200">
-        今天有什么可以帮助你的？
-      </h1>
+      <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-semibold duration-200">今天有什么可以帮助你的？</h1>
     </div>
   );
 };
@@ -250,28 +228,14 @@ const ComposerAction: FC = () => {
         </AuiIf>
         <AuiIf condition={(s) => !s.thread.isRunning}>
           <ComposerPrimitive.Send asChild>
-            <TooltipIconButton
-              tooltip="发送消息"
-              side="bottom"
-              type="button"
-              variant="default"
-              size="icon"
-              className="aui-composer-send size-7 rounded-full"
-              aria-label="发送消息"
-            >
+            <TooltipIconButton tooltip="发送消息" side="bottom" type="button" variant="default" size="icon" className="aui-composer-send size-7 rounded-full" aria-label="发送消息">
               <ArrowUpIcon className="aui-composer-send-icon size-4.5" />
             </TooltipIconButton>
           </ComposerPrimitive.Send>
         </AuiIf>
         <AuiIf condition={(s) => s.thread.isRunning}>
           <ComposerPrimitive.Cancel asChild>
-            <Button
-              type="button"
-              variant="default"
-              size="icon"
-              className="aui-composer-cancel size-7 rounded-full"
-              aria-label="停止生成"
-            >
+            <Button type="button" variant="default" size="icon" className="aui-composer-cancel size-7 rounded-full" aria-label="停止生成">
               <SquareIcon className="aui-composer-cancel-icon size-3.5 fill-current" />
             </Button>
           </ComposerPrimitive.Cancel>
@@ -292,11 +256,7 @@ const MessageError: FC = () => {
 };
 
 const AssistantMessage: FC = () => {
-  const {
-    ToolFallback: ToolFallbackComponent = ToolFallback,
-    ToolGroup,
-    ReasoningGroup,
-  } = useContext(ThreadComponentsContext);
+  const { ToolFallback: ToolFallbackComponent = ToolFallback, ToolGroup, ReasoningGroup } = useContext(ThreadComponentsContext);
 
   const ACTION_BAR_PT = "pt-1.5";
   // Keep the action bar inside the contained root's paint box, then cancel its reserved space in flow.
@@ -355,11 +315,7 @@ const AssistantMessage: FC = () => {
                 return part.dataRendererUI;
               case "indicator":
                 return (
-                  <span
-                    data-slot="aui_assistant-message-indicator"
-                    className="animate-pulse font-sans"
-                    aria-label="助手正在思考"
-                  >
+                  <span data-slot="aui_assistant-message-indicator" className="animate-pulse font-sans" aria-label="助手正在思考">
                     {"●"}
                   </span>
                 );
@@ -443,21 +399,14 @@ const UserMessage: FC = () => {
         </div>
       </div>
 
-      <BranchPicker
-        data-slot="aui_user-branch-picker"
-        className="col-span-full col-start-1 row-start-3 -me-1 justify-end"
-      />
+      <BranchPicker data-slot="aui_user-branch-picker" className="col-span-full col-start-1 row-start-3 -me-1 justify-end" />
     </MessagePrimitive.Root>
   );
 };
 
 const UserActionBar: FC = () => {
   return (
-    <ActionBarPrimitive.Root
-      hideWhenRunning
-      autohide="not-last"
-      className="aui-user-action-bar-root flex flex-col items-end"
-    >
+    <ActionBarPrimitive.Root hideWhenRunning autohide="not-last" className="aui-user-action-bar-root flex flex-col items-end">
       <ActionBarPrimitive.Edit asChild>
         <TooltipIconButton tooltip="编辑" className="aui-user-action-edit">
           <PencilIcon />
@@ -469,15 +418,9 @@ const UserActionBar: FC = () => {
 
 const EditComposer: FC = () => {
   return (
-    <MessagePrimitive.Root
-      data-slot="aui_edit-composer-wrapper"
-      className="flex flex-col px-2 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
-    >
+    <MessagePrimitive.Root data-slot="aui_edit-composer-wrapper" className="flex flex-col px-2 [contain-intrinsic-size:auto_200px] [content-visibility:auto]">
       <ComposerPrimitive.Root className="aui-edit-composer-root border-border/60 dark:border-muted-foreground/15 ms-auto flex w-full max-w-[85%] flex-col rounded-(--composer-radius) border bg-(--composer-bg) shadow-[0_4px_16px_-8px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)] dark:shadow-none">
-        <ComposerPrimitive.Input
-          className="aui-edit-composer-input text-foreground min-h-14 w-full resize-none bg-transparent px-4 pt-3 pb-1 text-base outline-none"
-          autoFocus
-        />
+        <ComposerPrimitive.Input className="aui-edit-composer-input text-foreground min-h-14 w-full resize-none bg-transparent px-4 pt-3 pb-1 text-base outline-none" autoFocus />
         <div className="aui-edit-composer-footer mx-2.5 mb-2.5 flex items-center gap-1.5 self-end">
           <ComposerPrimitive.Cancel asChild>
             <Button variant="ghost" size="sm" className="h-8 rounded-full px-3.5">
@@ -499,10 +442,7 @@ const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({ className, ...rest
   return (
     <BranchPickerPrimitive.Root
       hideWhenSingleBranch
-      className={cn(
-        "aui-branch-picker-root text-muted-foreground -ms-2 me-2 inline-flex items-center text-xs",
-        className,
-      )}
+      className={cn("aui-branch-picker-root text-muted-foreground -ms-2 me-2 inline-flex items-center text-xs", className)}
       {...rest}
     >
       <BranchPickerPrimitive.Previous asChild>

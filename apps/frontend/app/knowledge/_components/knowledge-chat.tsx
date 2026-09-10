@@ -1,11 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect, type FC } from "react";
-import {
-  AssistantRuntimeProvider,
-  useLocalRuntime,
-  useRemoteThreadListRuntime,
-} from "@assistant-ui/react";
+import { AssistantRuntimeProvider, useLocalRuntime, useRemoteThreadListRuntime } from "@assistant-ui/react";
 import { Thread } from "@/components/assistant-ui/thread";
 import { ThreadList } from "@/components/assistant-ui/thread-list";
 import { createKnowledgeChatAdapter } from "@/adapters/chat.adapter";
@@ -27,9 +23,7 @@ const KnowledgeChatWelcome: FC<{ kbName: string }> = ({ kbName }) => (
     </div>
     <div>
       <h2 className="text-lg font-semibold">{kbName}</h2>
-      <p className="mt-1.5 max-w-xs text-sm text-muted-foreground">
-        基于该知识库的内容进行智能问答。AI 会从知识库文档中检索相关信息来回答你的问题。
-      </p>
+      <p className="mt-1.5 max-w-xs text-sm text-muted-foreground">基于该知识库的内容进行智能问答。AI 会从知识库文档中检索相关信息来回答你的问题。</p>
     </div>
   </div>
 );
@@ -48,10 +42,7 @@ export function KnowledgeChat({ knowledgeBaseId, knowledgeBaseName }: KnowledgeC
     [knowledgeBaseId, knowledgeBaseName],
   );
 
-  const chatAdapter = useMemo(
-    () => createKnowledgeChatAdapter(knowledgeBaseId, knowledgeBaseName),
-    [knowledgeBaseId, knowledgeBaseName],
-  );
+  const chatAdapter = useMemo(() => createKnowledgeChatAdapter(knowledgeBaseId, knowledgeBaseName), [knowledgeBaseId, knowledgeBaseName]);
 
   // 注册当前知识库到全局 registry，便于 knowledge_search 事件展示来源名称
   useEffect(() => {

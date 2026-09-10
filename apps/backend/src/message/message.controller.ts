@@ -12,27 +12,17 @@ export class MessageController {
   constructor(private readonly messageService: MessageService) {}
 
   @Get("conversations/:convId/messages")
-  async getBranchMessages(
-    @Param("convId", ParseIntPipe) convId: number,
-    @Query("rootId") rootId?: string,
-  ) {
+  async getBranchMessages(@Param("convId", ParseIntPipe) convId: number, @Query("rootId") rootId?: string) {
     return this.messageService.getBranchMessages(convId, rootId ? Number(rootId) : undefined);
   }
 
   @Post("conversations/:convId/messages")
-  async sendMessage(
-    @CurrentUser() user: { id: number },
-    @Param("convId", ParseIntPipe) convId: number,
-    @Body() dto: SendMessageDto,
-  ) {
+  async sendMessage(@CurrentUser() user: { id: number }, @Param("convId", ParseIntPipe) convId: number, @Body() dto: SendMessageDto) {
     return this.messageService.createUserMessage(user.id, convId, dto);
   }
 
   @Post("messages/:id/edit")
-  async editMessage(
-    @Param("id", ParseIntPipe) id: number,
-    @Body() dto: EditMessageDto,
-  ) {
+  async editMessage(@Param("id", ParseIntPipe) id: number, @Body() dto: EditMessageDto) {
     return this.messageService.editMessage(id, dto);
   }
 
@@ -42,10 +32,7 @@ export class MessageController {
   }
 
   @Post("conversations/:convId/switch-branch")
-  async switchBranch(
-    @Param("convId", ParseIntPipe) convId: number,
-    @Body() dto: SwitchBranchDto,
-  ) {
+  async switchBranch(@Param("convId", ParseIntPipe) convId: number, @Body() dto: SwitchBranchDto) {
     return this.messageService.switchBranch(convId, dto.messageId);
   }
 }

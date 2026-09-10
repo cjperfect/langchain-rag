@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  AssistantRuntimeProvider,
-  useLocalRuntime,
-  useRemoteThreadListRuntime,
-  WebSpeechDictationAdapter,
-} from "@assistant-ui/react";
+import { AssistantRuntimeProvider, useLocalRuntime, useRemoteThreadListRuntime, WebSpeechDictationAdapter } from "@assistant-ui/react";
 import dynamic from "next/dynamic";
 import { Thread } from "@/components/assistant-ui/thread";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -14,10 +9,7 @@ import { ThreadListSidebar } from "@/components/assistant-ui/threadlist-sidebar"
 import { chatAdapter } from "@/adapters/chat.adapter";
 import { remoteThreadListAdapter } from "@/adapters/remote-thread-list.adapter";
 
-const DevToolsModal = dynamic(
-  () => import("@assistant-ui/react-devtools").then((m) => ({ default: m.DevToolsModal })),
-  { ssr: false },
-);
+const DevToolsModal = dynamic(() => import("@assistant-ui/react-devtools").then((m) => ({ default: m.DevToolsModal })), { ssr: false });
 
 // 避免每次 render 重建
 const speechAdapter = new WebSpeechDictationAdapter();

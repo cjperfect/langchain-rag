@@ -17,15 +17,22 @@ import type { DocumentViewerProps } from "@/interfaces/knowledge";
 // ---------------------------------------------------------------------------
 
 const CodeBlock: FC<{ language?: string; code: string }> = ({ language, code }) => {
-  const highlighted = useShikiHighlighter(code, language, {
-    dark: "github-dark-default",
-    light: "github-light-default",
-  }, { defaultColor: "light-dark()" });
+  const highlighted = useShikiHighlighter(
+    code,
+    language,
+    {
+      dark: "github-dark-default",
+      light: "github-light-default",
+    },
+    { defaultColor: "light-dark()" },
+  );
 
-  return highlighted ?? (
-    <pre className="overflow-x-auto rounded-xl border bg-muted/30 p-3.5 text-[13px] leading-relaxed">
-      <code>{code}</code>
-    </pre>
+  return (
+    highlighted ?? (
+      <pre className="overflow-x-auto rounded-xl border bg-muted/30 p-3.5 text-[13px] leading-relaxed">
+        <code>{code}</code>
+      </pre>
+    )
   );
 };
 
@@ -153,16 +160,12 @@ export function DocumentViewer({ content, fileName, loading, knowledgeBaseId, do
       {/* 正文区域 */}
       {editing ? (
         <div className="flex-1 overflow-y-auto p-6">
-          <RichTextEditor
-            initialContent={fullText}
-            placeholder="编辑文档内容（支持 Markdown 快捷键）..."
-            minHeight="60vh"
-            editorRef={editorRef}
-          />
+          <RichTextEditor initialContent={fullText} placeholder="编辑文档内容（支持 Markdown 快捷键）..." minHeight="60vh" editorRef={editorRef} />
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto p-6">
-          <div className="prose prose-sm dark:prose-invert max-w-none
+          <div
+            className="prose prose-sm dark:prose-invert max-w-none
             prose-headings:text-foreground
             prose-p:text-foreground/85 prose-p:leading-relaxed
             prose-a:text-primary prose-a:no-underline hover:prose-a:underline

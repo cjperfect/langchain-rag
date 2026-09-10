@@ -8,24 +8,18 @@
 "use client";
 
 import type { RemoteThreadListAdapter, ThreadHistoryAdapter } from "@assistant-ui/react";
-import { RuntimeAdapterProvider, useThreadListItemRuntime } from "@assistant-ui/react";
+import { RuntimeAdapterProvider, useAuiState } from "@assistant-ui/react";
 import { createAssistantStream } from "assistant-stream";
 import type { ExportedMessageRepository } from "@assistant-ui/react";
 import { get, post, patch, del } from "@/lib/api";
 import { useMemo, type FC, type PropsWithChildren } from "react";
-import type {
-  RemoteThreadMetadata,
-  RemoteThreadListResponse,
-  ConversationItem,
-  BackendMessage,
-} from "@/interfaces/chat";
+import type { RemoteThreadMetadata, RemoteThreadListResponse, ConversationItem, BackendMessage } from "@/interfaces/chat";
 
 // ---------------------------------------------------------------------------
 // HistoryProvider — 点击会话时从后端加载历史消息
 // ---------------------------------------------------------------------------
 const HistoryProvider: FC<PropsWithChildren> = ({ children }) => {
-  const runtime = useThreadListItemRuntime();
-  const remoteId = runtime.getState().remoteId ?? "";
+  const remoteId = useAuiState((s) => s.threadListItem.remoteId) ?? "";
 
   const history = useMemo<ThreadHistoryAdapter>(
     () => ({
@@ -108,10 +102,7 @@ const toMetadata = (c: ConversationItem): RemoteThreadMetadata => ({
 // Adapter factory
 // ---------------------------------------------------------------------------
 
-export function createRemoteThreadListAdapter(options?: {
-  knowledgeId?: number;
-  defaultTitle?: string;
-}): RemoteThreadListAdapter {
+export function createRemoteThreadListAdapter(options?: { knowledgeId?: number; defaultTitle?: string }): RemoteThreadListAdapter {
   const knowledgeId = options?.knowledgeId;
   const defaultTitle = options?.defaultTitle ?? "新会话";
 
@@ -121,9 +112,7 @@ export function createRemoteThreadListAdapter(options?: {
 
     /** 获取会话列表 */
     async list(): Promise<RemoteThreadListResponse> {
-      const url = knowledgeId != null
-        ? `/conversations?knowledge_id=${knowledgeId}`
-        : "/conversations";
+      const url = knowledgeId != null ? `/conversations?knowledge_id=${knowledgeId}` : "/conversations";
       const data = await get<ConversationItem[]>(url);
       return { threads: data.map(toMetadata) };
     },

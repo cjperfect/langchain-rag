@@ -1,31 +1,12 @@
 "use client";
 
-import {
-  memo,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  createContext,
-  useContext,
-  type ComponentPropsWithoutRef,
-  type ReactNode,
-} from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, createContext, useContext, type ComponentPropsWithoutRef, type ReactNode } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { CheckIcon, ChevronDownIcon } from "lucide-react";
 import { useAui } from "@assistant-ui/react";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-  CommandSeparator,
-} from "@/components/ui/command";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
 import { RadioGroup } from "@base-ui/react/radio-group";
 import { Radio } from "@base-ui/react/radio";
 
@@ -56,17 +37,12 @@ export type ModelOption = {
   efforts?: boolean | readonly ModelSelectorEffortOption[];
 };
 
-function getModelEfforts(
-  model: ModelOption | undefined,
-): readonly ModelSelectorEffortOption[] | undefined {
+function getModelEfforts(model: ModelOption | undefined): readonly ModelSelectorEffortOption[] | undefined {
   if (!model?.efforts) return undefined;
   return model.efforts === true ? DEFAULT_EFFORT_OPTIONS : model.efforts;
 }
 
-function resolveEffort(
-  efforts: readonly ModelSelectorEffortOption[] | undefined,
-  effort: string | undefined,
-): string | undefined {
+function resolveEffort(efforts: readonly ModelSelectorEffortOption[] | undefined, effort: string | undefined): string | undefined {
   if (effort === undefined) return undefined;
   return efforts?.some((e) => e.id === effort) ? effort : undefined;
 }
@@ -76,23 +52,11 @@ function resolveEffort(
  * Effort selection is kept sticky across model switches; this resolves what
  * actually applies to the current model.
  */
-export function resolveModelEffort(
-  models: readonly ModelOption[],
-  modelId: string | undefined,
-  effort: string | undefined,
-): string | undefined {
+export function resolveModelEffort(models: readonly ModelOption[], modelId: string | undefined, effort: string | undefined): string | undefined {
   return resolveEffort(getModelEfforts(models.find((m) => m.id === modelId)), effort);
 }
 
-function useControllableState<T>({
-  prop,
-  defaultProp,
-  onChange,
-}: {
-  prop: T | undefined;
-  defaultProp: T | undefined;
-  onChange: ((next: T) => void) | undefined;
-}) {
+function useControllableState<T>({ prop, defaultProp, onChange }: { prop: T | undefined; defaultProp: T | undefined; onChange: ((next: T) => void) | undefined }) {
   const [internal, setInternal] = useState(defaultProp);
   const isControlled = prop !== undefined;
   const value = isControlled ? prop : internal;
@@ -242,17 +206,9 @@ export const modelSelectorTriggerVariants = cva(
   },
 );
 
-export type ModelSelectorTriggerProps = ComponentPropsWithoutRef<typeof PopoverTrigger> &
-  VariantProps<typeof modelSelectorTriggerVariants>;
+export type ModelSelectorTriggerProps = ComponentPropsWithoutRef<typeof PopoverTrigger> & VariantProps<typeof modelSelectorTriggerVariants>;
 
-function ModelSelectorTrigger({
-  className,
-  variant,
-  size,
-  children,
-  onKeyDown,
-  ...props
-}: ModelSelectorTriggerProps) {
+function ModelSelectorTrigger({ className, variant, size, children, onKeyDown, ...props }: ModelSelectorTriggerProps) {
   const { setOpen } = useModelSelectorContext();
 
   return (
@@ -289,23 +245,10 @@ export type ModelSelectorValueProps = {
 };
 
 function ModelIcon({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <span
-      className={cn(
-        "flex size-3.5 shrink-0 items-center justify-center [&_svg]:size-3.5",
-        className,
-      )}
-    >
-      {children}
-    </span>
-  );
+  return <span className={cn("flex size-3.5 shrink-0 items-center justify-center [&_svg]:size-3.5", className)}>{children}</span>;
 }
 
-function ModelSelectorValue({
-  placeholder = "Select model",
-  showEffort = true,
-  className,
-}: ModelSelectorValueProps) {
+function ModelSelectorValue({ placeholder = "Select model", showEffort = true, className }: ModelSelectorValueProps) {
   const { selectedModel, efforts, effort } = useModelSelectorContext();
 
   if (!selectedModel) {
@@ -316,19 +259,13 @@ function ModelSelectorValue({
     );
   }
 
-  const effortName =
-    showEffort && effort !== undefined ? efforts?.find((e) => e.id === effort)?.name : undefined;
+  const effortName = showEffort && effort !== undefined ? efforts?.find((e) => e.id === effort)?.name : undefined;
 
   return (
-    <span
-      data-slot="model-selector-value"
-      className={cn("flex min-w-0 items-center gap-2", className)}
-    >
+    <span data-slot="model-selector-value" className={cn("flex min-w-0 items-center gap-2", className)}>
       {selectedModel.icon && <ModelIcon>{selectedModel.icon}</ModelIcon>}
       <span className="truncate font-medium">{selectedModel.name}</span>
-      {effortName && (
-        <span className="text-muted-foreground min-w-7.5 truncate text-center">{effortName}</span>
-      )}
+      {effortName && <span className="text-muted-foreground min-w-7.5 truncate text-center">{effortName}</span>}
     </span>
   );
 }
@@ -350,14 +287,7 @@ function ModelSelectorFocusAnchor() {
   );
 }
 
-function ModelSelectorContent({
-  className,
-  align = "start",
-  sideOffset = 6,
-  searchable,
-  children,
-  ...props
-}: ModelSelectorContentProps) {
+function ModelSelectorContent({ className, align = "start", sideOffset = 6, searchable, children, ...props }: ModelSelectorContentProps) {
   const { value } = useModelSelectorContext();
   const unfiltered = searchable === false || (!searchable && children === undefined);
 
@@ -366,17 +296,10 @@ function ModelSelectorContent({
       data-slot="model-selector-content"
       align={align}
       sideOffset={sideOffset}
-      className={cn(
-        "bg-popover/95 w-72 min-w-(--anchor-width) overflow-hidden rounded-xl p-0 shadow-lg backdrop-blur-sm",
-        className,
-      )}
+      className={cn("bg-popover/95 w-72 min-w-(--anchor-width) overflow-hidden rounded-xl p-0 shadow-lg backdrop-blur-sm", className)}
       {...props}
     >
-      <Command
-        className="bg-transparent"
-        shouldFilter={!unfiltered}
-        {...(value !== undefined ? { defaultValue: value } : {})}
-      >
+      <Command className="bg-transparent" shouldFilter={!unfiltered} {...(value !== undefined ? { defaultValue: value } : {})}>
         {unfiltered && <ModelSelectorFocusAnchor />}
         {children ?? (
           <>
@@ -392,10 +315,7 @@ function ModelSelectorContent({
 
 export type ModelSelectorSearchProps = ComponentPropsWithoutRef<typeof CommandInput>;
 
-function ModelSelectorSearch({
-  placeholder = "Search models...",
-  ...props
-}: ModelSelectorSearchProps) {
+function ModelSelectorSearch({ placeholder = "Search models...", ...props }: ModelSelectorSearchProps) {
   return <CommandInput data-slot="model-selector-search" placeholder={placeholder} {...props} />;
 }
 
@@ -405,14 +325,7 @@ function ModelSelectorList({ className, children, ...props }: ModelSelectorListP
   const { models } = useModelSelectorContext();
 
   return (
-    <CommandList
-      data-slot="model-selector-list"
-      className={cn(
-        "[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-        className,
-      )}
-      {...props}
-    >
+    <CommandList data-slot="model-selector-list" className={cn("[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden", className)} {...props}>
       {children ?? (
         <>
           <ModelSelectorEmpty />
@@ -453,13 +366,7 @@ export type ModelSelectorItemProps = Omit<ComponentPropsWithoutRef<typeof Comman
   model: ModelOption;
 };
 
-function ModelSelectorItem({
-  model,
-  className,
-  children,
-  onSelect,
-  ...props
-}: ModelSelectorItemProps) {
+function ModelSelectorItem({ model, className, children, onSelect, ...props }: ModelSelectorItemProps) {
   const { value, setValue, setOpen } = useModelSelectorContext();
   const isSelected = value === model.id;
 
@@ -474,10 +381,7 @@ function ModelSelectorItem({
         setOpen(false);
         onSelect?.(selectedValue);
       }}
-      className={cn(
-        "relative items-start gap-2 rounded-lg py-2 ps-3 pe-9 [&_svg:not([class*='size-'])]:size-3.5",
-        className,
-      )}
+      className={cn("relative items-start gap-2 rounded-lg py-2 ps-3 pe-9 [&_svg:not([class*='size-'])]:size-3.5", className)}
       {...props}
     >
       {children ?? (
@@ -485,9 +389,7 @@ function ModelSelectorItem({
           {model.icon && <ModelIcon className="mt-[3px]">{model.icon}</ModelIcon>}
           <span className="flex min-w-0 flex-col">
             <span className="truncate font-medium">{model.name}</span>
-            {model.description && (
-              <span className="text-muted-foreground truncate text-xs">{model.description}</span>
-            )}
+            {model.description && <span className="text-muted-foreground truncate text-xs">{model.description}</span>}
           </span>
         </>
       )}
@@ -504,12 +406,7 @@ export type ModelSelectorEffortProps = ComponentPropsWithoutRef<"div"> & {
   label?: ReactNode;
 };
 
-function ModelSelectorEffort({
-  label = "Thinking",
-  className,
-  onKeyDown,
-  ...props
-}: ModelSelectorEffortProps) {
+function ModelSelectorEffort({ label = "Thinking", className, onKeyDown, ...props }: ModelSelectorEffortProps) {
   const { efforts, effort, setEffort } = useModelSelectorEfforts();
 
   if (!efforts?.length) return null;
@@ -529,21 +426,13 @@ function ModelSelectorEffort({
         // and Enter selects again (cmdk's Enter is inert while a radio has
         // focus, so the highlight would otherwise move with no way to act).
         if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-          e.currentTarget
-            .closest("[cmdk-root]")
-            ?.querySelector<HTMLInputElement>("[cmdk-input]")
-            ?.focus();
+          e.currentTarget.closest("[cmdk-root]")?.querySelector<HTMLInputElement>("[cmdk-input]")?.focus();
         }
       }}
       {...props}
     >
       <span className="text-muted-foreground text-xs">{label}</span>
-      <RadioGroup
-        value={effort ?? ""}
-        onValueChange={setEffort}
-        aria-label={typeof label === "string" ? label : "Reasoning effort"}
-        className="flex items-center gap-0.5"
-      >
+      <RadioGroup value={effort ?? ""} onValueChange={setEffort} aria-label={typeof label === "string" ? label : "Reasoning effort"} className="flex items-center gap-0.5">
         {efforts.map((option) => (
           <Radio.Root
             key={option.id}
@@ -594,24 +483,12 @@ function ModelSelectorModelContext() {
   return null;
 }
 
-const ModelSelectorImpl = ({
-  searchable,
-  variant,
-  size,
-  align,
-  className,
-  contentClassName,
-  ...rootProps
-}: ModelSelectorProps) => {
+const ModelSelectorImpl = ({ searchable, variant, size, align, className, contentClassName, ...rootProps }: ModelSelectorProps) => {
   return (
     <ModelSelectorRoot {...rootProps}>
       <ModelSelectorModelContext />
       <ModelSelectorTrigger variant={variant} size={size} className={className} />
-      <ModelSelectorContent
-        {...(align !== undefined ? { align } : {})}
-        className={contentClassName}
-        searchable={searchable ?? false}
-      />
+      <ModelSelectorContent {...(align !== undefined ? { align } : {})} className={contentClassName} searchable={searchable ?? false} />
     </ModelSelectorRoot>
   );
 };

@@ -4,11 +4,7 @@ import { Prisma } from "@prisma/client";
 import { Exceptions } from "../common/exceptions/business.exception";
 import { CommonStatus } from "@langchain-rag/shared";
 import { AiEngine } from "@langchain-rag/ai-engine";
-import type {
-  CreateConversationDto,
-  UpdateConversationDto,
-  GenerateTitleDto,
-} from "./dto/conversation.dto";
+import type { CreateConversationDto, UpdateConversationDto, GenerateTitleDto } from "./dto/conversation.dto";
 
 @Injectable()
 export class ConversationService {

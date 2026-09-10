@@ -43,8 +43,7 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  --animate-shimmer: shimmer-sweep var(--shimmer-duration, 1000ms) linear
-    infinite both;
+  --animate-shimmer: shimmer-sweep var(--shimmer-duration, 1000ms) linear infinite both;
   @keyframes shimmer-sweep {
     from {
       background-position: 150% 0;
@@ -54,19 +53,19 @@
     }
   }
   @keyframes collapsible-down {
-  from {
-    height: 0;
+    from {
+      height: 0;
     }
-  to {
-    height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
+    to {
+      height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
     }
   }
   @keyframes collapsible-up {
-  from {
-    height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
+    from {
+      height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
     }
-  to {
-    height: 0;
+    to {
+      height: 0;
     }
   }
 }
@@ -161,4 +160,3 @@
 @custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));
 
 @custom-variant data-closed (&:where([data-state="closed"], [data-closed]:not([data-closed="false"])));
-

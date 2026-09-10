@@ -57,12 +57,7 @@ export class RagService {
    * @param names 知识库名称 / 文档文件名（存入 vector metadata，检索时直接返回）
    * @returns 切片列表（含序号和 token 估算）
    */
-  async indexDocument(
-    kbId: number,
-    documentId: number,
-    content: string,
-    names?: { kbName?: string; documentName?: string },
-  ): Promise<ChunkData[]> {
+  async indexDocument(kbId: number, documentId: number, content: string, names?: { kbName?: string; documentName?: string }): Promise<ChunkData[]> {
     const texts = await splitTextToChunks(content);
     if (texts.length === 0) return [];
 
@@ -94,12 +89,7 @@ export class RagService {
   /**
    * 重建索引：删除旧向量 → 重新切片 → 重新向量化
    */
-  async reindexDocument(
-    documentId: number,
-    kbId: number,
-    content: string,
-    names?: { kbName?: string; documentName?: string },
-  ): Promise<ChunkData[]> {
+  async reindexDocument(documentId: number, kbId: number, content: string, names?: { kbName?: string; documentName?: string }): Promise<ChunkData[]> {
     await this.deleteByDocumentId(documentId);
     return this.indexDocument(kbId, documentId, content, names);
   }
@@ -111,10 +101,7 @@ export class RagService {
    * @param options.kbIds 限制在指定知识库
    * @param options.k top-K
    */
-  async search(
-    query: string,
-    options: { kbIds?: number[]; k?: number } = {},
-  ): Promise<RagSearchResult[]> {
+  async search(query: string, options: { kbIds?: number[]; k?: number } = {}): Promise<RagSearchResult[]> {
     const { kbIds, k = 5 } = options;
 
     const store = await this.getStore();
@@ -146,7 +133,6 @@ export class RagService {
     // PGVectorStore 支持通过 metadata filter 删除
     await store.delete({ filter: { documentId } });
   }
-
 }
 
 /**

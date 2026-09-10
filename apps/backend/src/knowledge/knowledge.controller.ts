@@ -1,16 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Patch,
-  Delete,
-  Param,
-  Body,
-  UseGuards,
-  ParseIntPipe,
-  UseInterceptors,
-  UploadedFile,
-} from "@nestjs/common";
+import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, ParseIntPipe, UseInterceptors, UploadedFile } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { KnowledgeService } from "./knowledge.service";
 import type { CreateKnowledgeBaseDto, UpdateKnowledgeBaseDto, CreateDocumentDto, UpdateDocumentDto } from "./dto/knowledge.dto";
@@ -44,11 +32,7 @@ export class KnowledgeController {
   }
 
   @Patch(":id")
-  async update(
-    @Param("id", ParseIntPipe) id: number,
-    @CurrentUser() user: { id: number },
-    @Body() dto: UpdateKnowledgeBaseDto,
-  ) {
+  async update(@Param("id", ParseIntPipe) id: number, @CurrentUser() user: { id: number }, @Body() dto: UpdateKnowledgeBaseDto) {
     return this.knowledgeService.update(id, user.id, dto);
   }
 
@@ -62,29 +46,18 @@ export class KnowledgeController {
   // ==========================================================================
 
   @Get(":id/documents")
-  async getDocuments(
-    @Param("id", ParseIntPipe) id: number,
-    @CurrentUser() user: { id: number },
-  ) {
+  async getDocuments(@Param("id", ParseIntPipe) id: number, @CurrentUser() user: { id: number }) {
     return this.knowledgeService.getDocuments(id, user.id);
   }
 
   @Post(":id/documents")
-  async createDocument(
-    @Param("id", ParseIntPipe) id: number,
-    @CurrentUser() user: { id: number },
-    @Body() dto: CreateDocumentDto,
-  ) {
+  async createDocument(@Param("id", ParseIntPipe) id: number, @CurrentUser() user: { id: number }, @Body() dto: CreateDocumentDto) {
     return this.knowledgeService.createDocument(id, user.id, dto);
   }
 
   @Post(":id/upload")
   @UseInterceptors(FileInterceptor("file"))
-  async uploadDocument(
-    @Param("id", ParseIntPipe) id: number,
-    @CurrentUser() user: { id: number },
-    @UploadedFile() file: { buffer: Buffer; originalname: string; size: number },
-  ) {
+  async uploadDocument(@Param("id", ParseIntPipe) id: number, @CurrentUser() user: { id: number }, @UploadedFile() file: { buffer: Buffer; originalname: string; size: number }) {
     return this.knowledgeService.uploadDocument(id, user.id, {
       fileName: file.originalname,
       buffer: file.buffer,
@@ -93,37 +66,22 @@ export class KnowledgeController {
   }
 
   @Get(":id/documents/:docId/content")
-  async getDocumentContent(
-    @Param("id", ParseIntPipe) _id: number,
-    @Param("docId", ParseIntPipe) docId: number,
-  ) {
+  async getDocumentContent(@Param("id", ParseIntPipe) _id: number, @Param("docId", ParseIntPipe) docId: number) {
     return this.knowledgeService.getDocumentContent(docId);
   }
 
   @Get(":id/documents/:docId/chunks")
-  async getDocumentChunks(
-    @Param("id", ParseIntPipe) _id: number,
-    @Param("docId", ParseIntPipe) docId: number,
-  ) {
+  async getDocumentChunks(@Param("id", ParseIntPipe) _id: number, @Param("docId", ParseIntPipe) docId: number) {
     return this.knowledgeService.getDocumentChunks(docId);
   }
 
   @Patch(":id/documents/:docId")
-  async updateDocument(
-    @Param("id", ParseIntPipe) _id: number,
-    @Param("docId", ParseIntPipe) docId: number,
-    @CurrentUser() user: { id: number },
-    @Body() dto: UpdateDocumentDto,
-  ) {
+  async updateDocument(@Param("id", ParseIntPipe) _id: number, @Param("docId", ParseIntPipe) docId: number, @CurrentUser() user: { id: number }, @Body() dto: UpdateDocumentDto) {
     return this.knowledgeService.updateDocument(docId, user.id, dto);
   }
 
   @Delete(":id/documents/:docId")
-  async deleteDocument(
-    @Param("id", ParseIntPipe) _id: number,
-    @Param("docId", ParseIntPipe) docId: number,
-    @CurrentUser() user: { id: number },
-  ) {
+  async deleteDocument(@Param("id", ParseIntPipe) _id: number, @Param("docId", ParseIntPipe) docId: number, @CurrentUser() user: { id: number }) {
     return this.knowledgeService.deleteDocument(docId, user.id);
   }
 }

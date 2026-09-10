@@ -45,10 +45,7 @@ export const knowledgeSearchTool = tool(
 - 如果检索无结果，请明确告知用户知识库中没有相关信息`,
     schema: z.object({
       query: z.string().describe("检索查询语句，建议使用问题中的关键词"),
-      kbIds: z
-        .array(z.number())
-        .optional()
-        .describe("限定检索的知识库 ID 列表，不传则检索所有知识库"),
+      kbIds: z.array(z.number()).optional().describe("限定检索的知识库 ID 列表，不传则检索所有知识库"),
     }),
   },
 );

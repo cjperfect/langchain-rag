@@ -16,10 +16,7 @@ export type CreateDirectiveTextOptions = {
 };
 
 /** Creates a `Text` message part component that parses directive syntax and renders inline chips. */
-export function createDirectiveText(
-  formatter: Unstable_DirectiveFormatter,
-  options?: CreateDirectiveTextOptions,
-): TextMessagePartComponent {
+export function createDirectiveText(formatter: Unstable_DirectiveFormatter, options?: CreateDirectiveTextOptions): TextMessagePartComponent {
   const iconMap = options?.iconMap;
   const fallbackIcon = options?.fallbackIcon;
 

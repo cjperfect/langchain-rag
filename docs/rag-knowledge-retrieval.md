@@ -23,13 +23,14 @@
 export interface ChatOptions {
   history?: ContextMessage[];
   model?: string;
-  knowledgeIds?: number[];  // 新增
+  knowledgeIds?: number[]; // 新增
 }
 ```
 
 ### 2. `apps/backend/src/chat/dto/chat.dto.ts` — ChatDto 增加 knowledge_ids
 
 同时兼容两种前端场景：
+
 - 首页 `@mention`：发送 `knowledge_ids: number[]`（多选）
 - 知识库内聊天：发送 `knowledge_id: number`（单个）
 
@@ -40,8 +41,8 @@ export class ChatDto {
   model?: string;
   thinking_enabled?: boolean;
   parent_message_id?: number;
-  knowledge_ids?: number[];  // @mention 选中的知识库 ID 列表
-  knowledge_id?: number;     // 知识库内聊天时自动带入
+  knowledge_ids?: number[]; // @mention 选中的知识库 ID 列表
+  knowledge_id?: number; // 知识库内聊天时自动带入
 }
 ```
 
@@ -62,6 +63,7 @@ async searchChunks(
 ```
 
 检索策略：
+
 - 将 query 按空格/标点拆成关键词
 - 每个关键词用 `ILIKE '%keyword%'` 匹配
 - 多个关键词 OR 叠加，用 `CASE WHEN` 计数匹配次数作为简单评分
@@ -92,9 +94,7 @@ let augmentedPrompt = chatDto.prompt;
 if (chatDto.knowledge_ids?.length) {
   const chunks = await this.knowledgeService.searchChunks(chatDto.knowledge_ids, chatDto.prompt);
   if (chunks.length > 0) {
-    const docsXml = chunks.map(c =>
-      `<document source="${c.documentName}" score="${c.score}">\n${c.content}\n</document>`
-    ).join("\n");
+    const docsXml = chunks.map((c) => `<document source="${c.documentName}" score="${c.score}">\n${c.content}\n</document>`).join("\n");
     augmentedPrompt = `<documents>\n${docsXml}\n</documents>\n\n用户问题：${chatDto.prompt}`;
   }
 }

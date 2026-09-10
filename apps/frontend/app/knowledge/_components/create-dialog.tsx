@@ -2,14 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -64,9 +57,7 @@ export function CreateDialog({ open, onOpenChange, onSubmit, editingKb }: Create
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{isEditing ? "编辑知识库" : "新建知识库"}</DialogTitle>
-          <DialogDescription>
-            {isEditing ? "修改知识库的名称和描述信息" : "创建一个新的知识库，后续可上传文档进行管理"}
-          </DialogDescription>
+          <DialogDescription>{isEditing ? "修改知识库的名称和描述信息" : "创建一个新的知识库，后续可上传文档进行管理"}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">

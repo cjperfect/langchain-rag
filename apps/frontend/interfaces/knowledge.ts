@@ -151,9 +151,6 @@ export interface DocumentListProps {
   /** 是否加载中 */
   loading: boolean;
 }
-  /** 是否加载中 */
-  loading: boolean;
-}
 
 /** DocumentViewer 组件 Props */
 export interface DocumentViewerProps {

@@ -8,23 +8,9 @@ import { get, post, patch, del } from "@/lib/api";
 // 类型定义（从 interfaces 统一导出）
 // ============================================================================
 
-import type {
-  KnowledgeBase,
-  CreateKnowledgeBaseInput,
-  UpdateKnowledgeBaseInput,
-  KnowledgeBaseDocument,
-  CreateDocumentInput,
-  DocumentChunk,
-} from "@/interfaces/knowledge";
+import type { KnowledgeBase, CreateKnowledgeBaseInput, UpdateKnowledgeBaseInput, KnowledgeBaseDocument, CreateDocumentInput, DocumentChunk } from "@/interfaces/knowledge";
 
-export type {
-  KnowledgeBase,
-  CreateKnowledgeBaseInput,
-  UpdateKnowledgeBaseInput,
-  KnowledgeBaseDocument,
-  CreateDocumentInput,
-  DocumentChunk,
-};
+export type { KnowledgeBase, CreateKnowledgeBaseInput, UpdateKnowledgeBaseInput, KnowledgeBaseDocument, CreateDocumentInput, DocumentChunk };
 
 // ============================================================================
 // 知识库 CRUD
@@ -42,10 +28,7 @@ export async function createKnowledgeBase(input: CreateKnowledgeBaseInput): Prom
   return post<KnowledgeBase>("/knowledge", input);
 }
 
-export async function updateKnowledgeBase(
-  id: number,
-  input: UpdateKnowledgeBaseInput,
-): Promise<KnowledgeBase> {
+export async function updateKnowledgeBase(id: number, input: UpdateKnowledgeBaseInput): Promise<KnowledgeBase> {
   return patch<KnowledgeBase>(`/knowledge/${id}`, input);
 }
 
@@ -61,31 +44,19 @@ export async function getDocuments(knowledgeBaseId: number): Promise<KnowledgeBa
   return get<KnowledgeBaseDocument[]>(`/knowledge/${knowledgeBaseId}/documents`);
 }
 
-export async function getDocumentContent(
-  knowledgeBaseId: number,
-  documentId: number,
-): Promise<{ content: string }> {
+export async function getDocumentContent(knowledgeBaseId: number, documentId: number): Promise<{ content: string }> {
   return get<{ content: string }>(`/knowledge/${knowledgeBaseId}/documents/${documentId}/content`);
 }
 
-export async function getDocumentChunks(
-  knowledgeBaseId: number,
-  documentId: number,
-): Promise<DocumentChunk[]> {
+export async function getDocumentChunks(knowledgeBaseId: number, documentId: number): Promise<DocumentChunk[]> {
   return get<DocumentChunk[]>(`/knowledge/${knowledgeBaseId}/documents/${documentId}/chunks`);
 }
 
-export async function createDocument(
-  kbId: number,
-  input: CreateDocumentInput,
-): Promise<KnowledgeBaseDocument> {
+export async function createDocument(kbId: number, input: CreateDocumentInput): Promise<KnowledgeBaseDocument> {
   return post<KnowledgeBaseDocument>(`/knowledge/${kbId}/documents`, input);
 }
 
-export async function uploadDocument(
-  kbId: number,
-  file: File,
-): Promise<KnowledgeBaseDocument> {
+export async function uploadDocument(kbId: number, file: File): Promise<KnowledgeBaseDocument> {
   const formData = new FormData();
   formData.append("file", file);
 
@@ -103,11 +74,7 @@ export async function uploadDocument(
   return json.data;
 }
 
-export async function updateDocument(
-  kbId: number,
-  docId: number,
-  input: { content?: string; fileName?: string },
-): Promise<KnowledgeBaseDocument> {
+export async function updateDocument(kbId: number, docId: number, input: { content?: string; fileName?: string }): Promise<KnowledgeBaseDocument> {
   return patch<KnowledgeBaseDocument>(`/knowledge/${kbId}/documents/${docId}`, input);
 }
 

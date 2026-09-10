@@ -18,10 +18,7 @@ type HighlightOverlayProps = {
  * `@mentions` with green highlight styling. The textarea's text is made
  * transparent so the highlighted overlay shows through.
  */
-export function HighlightOverlay({
-  textareaRef,
-  formatter,
-}: HighlightOverlayProps) {
+export function HighlightOverlay({ textareaRef, formatter }: HighlightOverlayProps) {
   const text = useAuiState(selectComposerText) ?? "";
   const [scrollTop, setScrollTop] = useState(0);
   const [height, setHeight] = useState(0);

@@ -6,12 +6,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { Exceptions } from "../common/exceptions/business.exception";
 import { CommonStatus } from "@langchain-rag/shared";
 import { loadPdf, loadCsv, loadText, loadMarkdown, ragService } from "@langchain-rag/ai-engine";
-import type {
-  CreateKnowledgeBaseDto,
-  UpdateKnowledgeBaseDto,
-  CreateDocumentDto,
-  UpdateDocumentDto,
-} from "./dto/knowledge.dto";
+import type { CreateKnowledgeBaseDto, UpdateKnowledgeBaseDto, CreateDocumentDto, UpdateDocumentDto } from "./dto/knowledge.dto";
 
 /**
  * 根据文件名推断文件类型
@@ -182,11 +177,7 @@ export class KnowledgeService {
   }
 
   /** 上传文件：根据扩展名路由到对应 Loader 提取文本，再切片入库 */
-  async uploadDocument(
-    kbId: number,
-    userId: number,
-    file: { fileName: string; buffer: Buffer; size: number },
-  ) {
+  async uploadDocument(kbId: number, userId: number, file: { fileName: string; buffer: Buffer; size: number }) {
     await this.get(kbId);
 
     const ext = getFileType(file.fileName);
@@ -315,5 +306,4 @@ export class KnowledgeService {
       data: { status: CommonStatus.DELETED },
     });
   }
-
 }

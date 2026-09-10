@@ -2,14 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Loader2, Maximize2, Minimize2, X } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -147,11 +140,7 @@ export function CreateDocumentDialog({ open, onOpenChange, onSubmit }: CreateDoc
     >
       <DialogContent
         showCloseButton={false}
-        className={`flex flex-col transition-all duration-200 ${
-          fullscreen
-            ? "max-w-none! w-[98dvw]! h-[98dvh]! rounded-xl!"
-            : "sm:max-w-3xl max-h-[85dvh]"
-        }`}
+        className={`flex flex-col transition-all duration-200 ${fullscreen ? "max-w-none! w-[98dvw]! h-[98dvh]! rounded-xl!" : "sm:max-w-3xl max-h-[85dvh]"}`}
       >
         <DialogHeader>
           <div className="flex items-start justify-between">
@@ -160,24 +149,10 @@ export function CreateDocumentDialog({ open, onOpenChange, onSubmit }: CreateDoc
               <DialogDescription>使用富文本编辑器编写 Markdown 文档</DialogDescription>
             </div>
             <div className="flex items-center gap-0.5 shrink-0">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-7"
-                title={fullscreen ? "退出全屏" : "全屏"}
-                onClick={() => setFullscreen(!fullscreen)}
-                type="button"
-              >
+              <Button variant="ghost" size="icon" className="size-7" title={fullscreen ? "退出全屏" : "全屏"} onClick={() => setFullscreen(!fullscreen)} type="button">
                 {fullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
               </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-7"
-                title="关闭"
-                onClick={() => onOpenChange(false)}
-                type="button"
-              >
+              <Button variant="ghost" size="icon" className="size-7" title="关闭" onClick={() => onOpenChange(false)} type="button">
                 <X className="size-4" />
               </Button>
             </div>
@@ -202,13 +177,7 @@ export function CreateDocumentDialog({ open, onOpenChange, onSubmit }: CreateDoc
 
           <div className="flex-1 flex flex-col min-w-0 space-y-1">
             <Label>内容</Label>
-            <RichTextEditor
-              initialContent={content}
-              placeholder="使用 Markdown 语法或工具栏编写文档内容..."
-              minHeight="200px"
-              onContentChange={setContent}
-              editorRef={editorRef}
-            />
+            <RichTextEditor initialContent={content} placeholder="使用 Markdown 语法或工具栏编写文档内容..." minHeight="200px" onContentChange={setContent} editorRef={editorRef} />
           </div>
 
           {error ? <p className="text-sm text-destructive">{error}</p> : null}

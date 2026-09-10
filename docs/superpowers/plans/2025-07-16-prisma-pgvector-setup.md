@@ -18,9 +18,11 @@
 - `.gitignore` already excludes `/src/generated/prisma` (no change needed)
 
 ---
+
 ### Task 1: Create Docker Compose for PostgreSQL + pgvector
 
 **Files:**
+
 - Create: `docker/docker-compose.yml`
 
 - [ ] **Step 1: Create docker-compose.yml**
@@ -60,12 +62,14 @@ git commit -m "feat: add docker-compose with postgres + pgvector"
 ### Task 2: Update Environment Variables
 
 **Files:**
+
 - Modify: `apps/backend/.env.example`
 - Modify: `apps/backend/.env`
 
 - [ ] **Step 1: Update .env with production DATABASE_URL**
 
 Write to `apps/backend/.env`:
+
 ```
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/langchain_rag"
 ```
@@ -73,6 +77,7 @@ DATABASE_URL="postgresql://postgres:postgres@localhost:5432/langchain_rag"
 - [ ] **Step 2: Update .env.example**
 
 Write to `apps/backend/.env.example`:
+
 ```
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/langchain_rag"
 ```
@@ -89,11 +94,13 @@ git commit -m "chore: update DATABASE_URL for local postgres"
 ### Task 3: Update Prisma Schema
 
 **Files:**
+
 - Modify: `apps/backend/prisma/schema.prisma`
 
 - [ ] **Step 1: Update schema with datasource URL and pgvector extension**
 
 Write to `apps/backend/prisma/schema.prisma`:
+
 ```prisma
 generator client {
   provider = "prisma-client"
@@ -123,11 +130,13 @@ git commit -m "feat: add datasource url and pgvector extension to prisma schema"
 ### Task 4: Install @prisma/client and Install Dependencies
 
 **Files:**
+
 - Modify: `apps/backend/package.json`
 
 - [ ] **Step 1: Install @prisma/client**
 
 Run from repo root:
+
 ```bash
 pnpm --filter backend add @prisma/client
 ```
@@ -144,21 +153,20 @@ git commit -m "feat: add @prisma/client dependency"
 ### Task 5: Create PrismaModule and PrismaService
 
 **Files:**
+
 - Create: `apps/backend/src/prisma/prisma.service.ts`
 - Create: `apps/backend/src/prisma/prisma.module.ts`
 
 - [ ] **Step 1: Create PrismaService**
 
 Write to `apps/backend/src/prisma/prisma.service.ts`:
+
 ```typescript
 import { Injectable, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
 import { PrismaClient } from "../generated/prisma";
 
 @Injectable()
-export class PrismaService
-  extends PrismaClient
-  implements OnModuleInit, OnModuleDestroy
-{
+export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     await this.$connect();
   }
@@ -172,6 +180,7 @@ export class PrismaService
 - [ ] **Step 2: Create PrismaModule**
 
 Write to `apps/backend/src/prisma/prisma.module.ts`:
+
 ```typescript
 import { Global, Module } from "@nestjs/common";
 import { PrismaService } from "./prisma.service";
@@ -196,11 +205,13 @@ git commit -m "feat: add PrismaModule and PrismaService"
 ### Task 6: Integrate PrismaModule into AppModule
 
 **Files:**
+
 - Modify: `apps/backend/src/app.module.ts`
 
 - [ ] **Step 1: Import PrismaModule in AppModule**
 
 Edit `apps/backend/src/app.module.ts`:
+
 ```typescript
 import { Module } from "@nestjs/common";
 import { AppController } from "./app.controller";
@@ -228,6 +239,7 @@ git commit -m "feat: integrate PrismaModule into AppModule"
 ### Task 7: Generate Prisma Client and Verify
 
 **Files:**
+
 - Run: `prisma generate`
 
 - [ ] **Step 1: Start PostgreSQL container**

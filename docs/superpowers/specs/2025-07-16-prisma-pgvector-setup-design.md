@@ -48,10 +48,10 @@ DATABASE_URL ──► PrismaClient ──► PrismaService (可注入 Provider)
 
 ### 依赖
 
-| 包名 | 类型 | 说明 |
-|------|------|------|
-| `@prisma/client` | runtime | Prisma ORM 客户端 |
-| `prisma` | dev | Prisma CLI（已安装） |
+| 包名             | 类型    | 说明                 |
+| ---------------- | ------- | -------------------- |
+| `@prisma/client` | runtime | Prisma ORM 客户端    |
+| `prisma`         | dev     | Prisma CLI（已安装） |
 
 ## 后续向量支持
 

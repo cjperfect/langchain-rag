@@ -1,0 +1,15 @@
+# 依赖
+node_modules/
+
+# 构建产物
+dist/
+build/
+.next/
+out/
+coverage/
+
+# 锁文件与生成物
+pnpm-lock.yaml
+package-lock.json
+*.tsbuildinfo
+next-env.d.ts

@@ -7,14 +7,7 @@ import "dayjs/locale/zh-cn";
 import { FileText, File, FileCode, FileJson, Trash2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { DocumentListProps } from "@/interfaces/knowledge";
 import { FILE_TYPE_COLORS, DEFAULT_FILE_COLOR, formatFileSize } from "@/constants/file-types";
 
@@ -86,22 +79,14 @@ export function DocumentList({ documents, selectedId, onSelect, onDelete, loadin
               selectedId === doc.id ? "bg-muted border-l-3 border-l-primary" : "border-l-2 border-transparent"
             }`}
           >
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted">
-              {FILE_TYPE_ICONS[doc.fileType] ?? DEFAULT_FILE_ICON}
-            </div>
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted">{FILE_TYPE_ICONS[doc.fileType] ?? DEFAULT_FILE_ICON}</div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{doc.fileName}</p>
               <p className="text-xs text-muted-foreground">
                 {formatFileSize(doc.fileSize)} · {doc.chunkCount} 切片 · {dayjs(doc.createdAt).format("MM/DD")}
               </p>
             </div>
-            <span
-              className={`text-[10px] px-1.5 py-0.5 rounded uppercase shrink-0 ${
-                FILE_TYPE_COLORS[doc.fileType] ?? DEFAULT_FILE_COLOR
-              }`}
-            >
-              {doc.fileType}
-            </span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase shrink-0 ${FILE_TYPE_COLORS[doc.fileType] ?? DEFAULT_FILE_COLOR}`}>{doc.fileType}</span>
             <Button
               variant="ghost"
               size="icon"
@@ -122,9 +107,7 @@ export function DocumentList({ documents, selectedId, onSelect, onDelete, loadin
         <DialogContent>
           <DialogHeader>
             <DialogTitle>确认删除</DialogTitle>
-            <DialogDescription>
-              此操作不可撤销。确定要删除文档「{targetDoc?.fileName ?? ""}」吗？
-            </DialogDescription>
+            <DialogDescription>此操作不可撤销。确定要删除文档「{targetDoc?.fileName ?? ""}」吗？</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>

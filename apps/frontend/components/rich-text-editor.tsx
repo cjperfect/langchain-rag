@@ -12,8 +12,25 @@ import Highlight from "@tiptap/extension-highlight";
 import TurndownService from "turndown";
 import { cn } from "@/lib/utils";
 import {
-  Bold, Italic, Underline, Strikethrough, Code, Quote, List, ListOrdered, ListChecks,
-  Heading1, Heading2, Heading3, CodeXml, Minus, Highlighter, Link, Undo2, Redo2, RemoveFormatting,
+  Bold,
+  Italic,
+  Underline,
+  Strikethrough,
+  Code,
+  Quote,
+  List,
+  ListOrdered,
+  ListChecks,
+  Heading1,
+  Heading2,
+  Heading3,
+  CodeXml,
+  Minus,
+  Highlighter,
+  Link,
+  Undo2,
+  Redo2,
+  RemoveFormatting,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -139,11 +156,7 @@ export const RichTextEditor: FC<RichTextEditorProps> = ({
   const initializedRef = useRef(false);
 
   const editor = useEditor({
-    extensions: [
-      ...DEFAULT_EXTENSIONS,
-      Placeholder.configure({ placeholder }),
-      ...extensions,
-    ],
+    extensions: [...DEFAULT_EXTENSIONS, Placeholder.configure({ placeholder }), ...extensions],
     onUpdate: ({ editor: ed }) => {
       if (!initializedRef.current) return;
       const md = htmlToMd(ed.getHTML());
@@ -199,15 +212,20 @@ export const RichTextEditor: FC<RichTextEditorProps> = ({
         { label: "删除线", icon: Strikethrough, action: () => editor.chain().focus().toggleStrike().run(), isActive: () => editor.isActive("strike") },
         { label: "高亮", icon: Highlighter, action: () => editor.chain().focus().toggleHighlight().run(), isActive: () => editor.isActive("highlight") },
         { label: "行内代码", icon: Code, action: () => editor.chain().focus().toggleCode().run(), isActive: () => editor.isActive("code") },
-        { label: "链接", icon: Link, action: () => {
-          if (editor.isActive("link")) {
-            editor.chain().focus().unsetLink().run();
-            return;
-          }
-          const existingHref = editor.getAttributes("link").href as string | undefined;
-          const url = window.prompt("输入链接 URL", existingHref ?? "");
-          if (url) editor.chain().focus().setLink({ href: url }).run();
-        }, isActive: () => editor.isActive("link") },
+        {
+          label: "链接",
+          icon: Link,
+          action: () => {
+            if (editor.isActive("link")) {
+              editor.chain().focus().unsetLink().run();
+              return;
+            }
+            const existingHref = editor.getAttributes("link").href as string | undefined;
+            const url = window.prompt("输入链接 URL", existingHref ?? "");
+            if (url) editor.chain().focus().setLink({ href: url }).run();
+          },
+          isActive: () => editor.isActive("link"),
+        },
         { label: "代码块", icon: CodeXml, action: () => editor.chain().focus().toggleCodeBlock().run(), isActive: () => editor.isActive("codeBlock") },
         { label: "引用", icon: Quote, action: () => editor.chain().focus().toggleBlockquote().run(), isActive: () => editor.isActive("blockquote") },
         { label: "无序列表", icon: List, action: () => editor.chain().focus().toggleBulletList().run(), isActive: () => editor.isActive("bulletList") },
@@ -227,17 +245,8 @@ export const RichTextEditor: FC<RichTextEditorProps> = ({
         <div className="flex shrink-0 flex-wrap items-center gap-0.5 rounded-t-md border border-b-0 border-input bg-muted/40 px-2 py-1.5">
           {toolbarButtons.map((btn, i) => (
             <span key={btn.label} className="contents">
-              {i > 0 && groupBreaks.has(btn.label) && (
-                <span className="mx-1 h-4 w-px bg-border" />
-              )}
-              <Button
-                variant={btn.isActive() ? "secondary" : "ghost"}
-                size="icon"
-                className="size-7"
-                onClick={btn.action}
-                title={btn.label}
-                type="button"
-              >
+              {i > 0 && groupBreaks.has(btn.label) && <span className="mx-1 h-4 w-px bg-border" />}
+              <Button variant={btn.isActive() ? "secondary" : "ghost"} size="icon" className="size-7" onClick={btn.action} title={btn.label} type="button">
                 <btn.icon className="size-3.5" />
               </Button>
             </span>

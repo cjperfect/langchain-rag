@@ -25,5 +25,12 @@ export type ChatStreamEvent =
   | { event: "tool_end"; data: { toolName?: string; result?: unknown } }
   | { event: "knowledge_search"; data: { query: string; kbIds?: number[]; results?: string; kbNames?: string[] } }
   | { event: "message"; data: { content: string } }
-  | { event: "done"; data: { request_message_id: number; response_message_id: number; rag_sources?: Array<{ kbId: number; kbName: string; documentId: number; documentName: string; score: number }> } }
+  | {
+      event: "done";
+      data: {
+        request_message_id: number;
+        response_message_id: number;
+        rag_sources?: Array<{ kbId: number; kbName: string; documentId: number; documentName: string; score: number }>;
+      };
+    }
   | { event: "error"; data: { error: string } };

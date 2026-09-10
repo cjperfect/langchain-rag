@@ -109,7 +109,8 @@ async function main() {
       fileName: "react-hooks-guide.txt",
       fileType: "txt",
       fileSize: 2048,
-      content: "React Hooks 是 React 16.8 引入的特性，允许在函数组件中使用 state 和其他 React 特性。常用的 Hooks 包括 useState、useEffect、useMemo、useCallback 等。合理使用 Hooks 可以显著提升代码可读性和复用性。",
+      content:
+        "React Hooks 是 React 16.8 引入的特性，允许在函数组件中使用 state 和其他 React 特性。常用的 Hooks 包括 useState、useEffect、useMemo、useCallback 等。合理使用 Hooks 可以显著提升代码可读性和复用性。",
       chunkCount: 2,
     },
   });
@@ -162,7 +163,8 @@ async function main() {
       fileName: "nestjs-modules.md",
       fileType: "md",
       fileSize: 1536,
-      content: "NestJS 使用模块（Module）来组织应用结构。每个应用至少有一个根模块。通过 @Module 装饰器声明模块，并通过 imports、controllers、providers 来管理依赖。依赖注入（DI）是 NestJS 的核心特性，大大简化了测试和模块解耦。",
+      content:
+        "NestJS 使用模块（Module）来组织应用结构。每个应用至少有一个根模块。通过 @Module 装饰器声明模块，并通过 imports、controllers、providers 来管理依赖。依赖注入（DI）是 NestJS 的核心特性，大大简化了测试和模块解耦。",
       chunkCount: 2,
     },
   });

@@ -9,10 +9,7 @@ import { cn } from "@/lib/utils";
 /**
  * Props for the SyntaxHighlighter component
  */
-export type HighlighterProps = Omit<
-  ShikiHighlighterProps,
-  "children" | "theme"
-> & {
+export type HighlighterProps = Omit<ShikiHighlighterProps, "children" | "theme"> & {
   theme?: ShikiHighlighterProps["theme"];
 } & Pick<AUIProps, "language" | "code"> &
   Partial<Pick<AUIProps, "node" | "components">>;
@@ -70,30 +67,12 @@ export const SyntaxHighlighter: FC<HighlighterProps> = ({
 }) => {
   const aui = useAui();
   const hasPart = aui.part.source !== null;
-  const isStreaming = useAuiState(
-    (s) => hasPart && s.part.status.type === "running",
-  );
+  const isStreaming = useAuiState((s) => hasPart && s.part.status.type === "running");
   const trimmed = code.trim();
 
   return (
-    <div
-      className={cn(
-        containerClassName,
-        isStreaming && "aui-shiki-streaming",
-        className,
-      )}
-      style={style}
-    >
-      {isStreaming ? (
-        <PlainCode code={trimmed} />
-      ) : (
-        <HighlightedCode
-          code={trimmed}
-          language={language}
-          theme={theme}
-          options={{ ...options, delay }}
-        />
-      )}
+    <div className={cn(containerClassName, isStreaming && "aui-shiki-streaming", className)} style={style}>
+      {isStreaming ? <PlainCode code={trimmed} /> : <HighlightedCode code={trimmed} language={language} theme={theme} options={{ ...options, delay }} />}
     </div>
   );
 };

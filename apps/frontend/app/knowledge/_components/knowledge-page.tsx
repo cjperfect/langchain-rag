@@ -7,14 +7,7 @@ import { Panel, Group, Separator } from "react-resizable-panels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DocumentList } from "./document-list";
 import { DocumentViewer } from "./document-viewer";
 import { KnowledgeList } from "./knowledge-list";
@@ -35,17 +28,14 @@ import {
 } from "@/api/knowledge-api";
 import type { KnowledgeBase, PageState } from "@/interfaces/knowledge";
 
-const KnowledgeChat = dynamic(
-  () => import("./knowledge-chat").then((m) => ({ default: m.KnowledgeChat })),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex h-full items-center justify-center">
-        <Skeleton className="h-8 w-32" />
-      </div>
-    ),
-  },
-);
+const KnowledgeChat = dynamic(() => import("./knowledge-chat").then((m) => ({ default: m.KnowledgeChat })), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-full items-center justify-center">
+      <Skeleton className="h-8 w-32" />
+    </div>
+  ),
+});
 
 // ---------------------------------------------------------------------------
 // Component
@@ -72,10 +62,7 @@ const initialState: PageState = {
 export function KnowledgePage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
-  const [state, setState] = useReducer(
-    (prev: PageState, next: Partial<PageState>) => ({ ...prev, ...next }),
-    initialState,
-  );
+  const [state, setState] = useReducer((prev: PageState, next: Partial<PageState>) => ({ ...prev, ...next }), initialState);
 
   const {
     allKbs,
@@ -186,9 +173,7 @@ export function KnowledgePage() {
       await createKnowledgeBase(data);
     }
     const updated = await fetchKbList();
-    const target = editingKb
-      ? (updated.find((k) => k.id === editingKb.id) ?? updated[0])
-      : updated[0];
+    const target = editingKb ? (updated.find((k) => k.id === editingKb.id) ?? updated[0]) : updated[0];
     if (target) {
       setState({ selectedKb: target, docsLoading: true });
       const docs = await getDocuments(target.id);
@@ -201,8 +186,7 @@ export function KnowledgePage() {
   const handleEdit = (kb: KnowledgeBase) => setState({ editingKb: kb, dialogOpen: true });
 
   // 删除
-  const handleDeleteClick = (kb: KnowledgeBase) =>
-    setState({ deleteTarget: kb, deleteDialogOpen: true });
+  const handleDeleteClick = (kb: KnowledgeBase) => setState({ deleteTarget: kb, deleteDialogOpen: true });
 
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
@@ -264,12 +248,7 @@ export function KnowledgePage() {
               ) : selectedDoc ? (
                 <div className="flex h-full flex-col border-r">
                   <div className="flex shrink-0 items-center gap-2 border-b px-4 py-2.5">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs"
-                      onClick={() => setState({ selectedDoc: null })}
-                    >
+                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setState({ selectedDoc: null })}>
                       ← 返回文件列表
                     </Button>
                     <span className="text-xs text-muted-foreground">{selectedKb.name}</span>
@@ -283,9 +262,7 @@ export function KnowledgePage() {
                       documentId={selectedDoc.id}
                       onSaved={() => {
                         // 重新加载文档内容
-                        getDocumentContent(selectedKb.id, selectedDoc.id).then(({ content }) =>
-                          setState({ docContent: content }),
-                        );
+                        getDocumentContent(selectedKb.id, selectedDoc.id).then(({ content }) => setState({ docContent: content }));
                       }}
                     />
                   </div>
@@ -303,31 +280,15 @@ export function KnowledgePage() {
                       />
                     </div>
                     <div className="ml-2 flex shrink-0 items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-7"
-                        title="新建文档"
-                        onClick={() => setState({ createDocOpen: true })}
-                      >
+                      <Button variant="ghost" size="icon" className="size-7" title="新建文档" onClick={() => setState({ createDocOpen: true })}>
                         <FilePlus className="size-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-7"
-                        title="上传文档"
-                        onClick={() => setState({ uploadDocOpen: true })}
-                      >
+                      <Button variant="ghost" size="icon" className="size-7" title="上传文档" onClick={() => setState({ uploadDocOpen: true })}>
                         <Upload className="size-4" />
                       </Button>
                     </div>
                     <span className="ml-1 shrink-0 text-xs text-muted-foreground">
-                      {docsLoading ? (
-                        <Skeleton className="inline-block h-3 w-8" />
-                      ) : (
-                        `${documents.length} 个文件`
-                      )}
+                      {docsLoading ? <Skeleton className="inline-block h-3 w-8" /> : `${documents.length} 个文件`}
                     </span>
                   </div>
                   <div className="flex-1 overflow-y-auto">
@@ -351,11 +312,7 @@ export function KnowledgePage() {
 
             {/* 右栏：AI 聊天 */}
             <Panel defaultSize={40} minSize={20}>
-              <KnowledgeChat
-                key={selectedKb?.id ?? "empty"}
-                knowledgeBaseId={selectedKb?.id ?? 0}
-                knowledgeBaseName={selectedKb?.name ?? ""}
-              />
+              <KnowledgeChat key={selectedKb?.id ?? "empty"} knowledgeBaseId={selectedKb?.id ?? 0} knowledgeBaseName={selectedKb?.name ?? ""} />
             </Panel>
           </Group>
         ) : (
@@ -397,18 +354,10 @@ export function KnowledgePage() {
       </Dialog>
 
       {/* 新建文档对话框 */}
-      <CreateDocumentDialog
-        open={createDocOpen}
-        onOpenChange={(open) => setState({ createDocOpen: open })}
-        onSubmit={handleCreateDocument}
-      />
+      <CreateDocumentDialog open={createDocOpen} onOpenChange={(open) => setState({ createDocOpen: open })} onSubmit={handleCreateDocument} />
 
       {/* 上传文档对话框 */}
-      <UploadDocumentDialog
-        open={uploadDocOpen}
-        onOpenChange={(open) => setState({ uploadDocOpen: open })}
-        onUpload={handleUploadDocument}
-      />
+      <UploadDocumentDialog open={uploadDocOpen} onOpenChange={(open) => setState({ uploadDocOpen: open })} onUpload={handleUploadDocument} />
     </div>
   );
 }

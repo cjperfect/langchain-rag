@@ -2,5 +2,16 @@
   "editor.fontSize": 16,
   "terminal.integrated.fontSize": 14,
   "terminal.integrated.fontFamily": "MesloLGS NF",
-  "workbench.iconTheme": "vscode-icons"
+  "workbench.iconTheme": "vscode-icons",
+
+  // 格式化统一走 Prettier
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.formatOnSave": true,
+  "prettier.requireConfig": true,
+
+  // ESLint 使用扁平配置，并在保存时自动修复
+  "eslint.useFlatConfig": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  }
 }

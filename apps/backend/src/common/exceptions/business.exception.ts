@@ -21,6 +21,5 @@ export const Exceptions = {
   notFound: (message = "资源不存在") => new BusinessException(ErrorCode.NOT_FOUND, message),
 
   /** 500 */
-  internal: (message = "服务器内部错误") =>
-    new BusinessException(ErrorCode.INTERNAL_ERROR, message),
+  internal: (message = "服务器内部错误") => new BusinessException(ErrorCode.INTERNAL_ERROR, message),
 };

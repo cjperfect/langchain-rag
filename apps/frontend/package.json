@@ -6,10 +6,10 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "oxlint && oxfmt --check",
-    "lint:fix": "oxlint --fix && oxfmt",
-    "format": "oxfmt --check",
-    "format:fix": "oxfmt"
+    "lint": "pnpm -w lint",
+    "lint:fix": "pnpm -w lint:fix",
+    "format": "pnpm -w format",
+    "format:fix": "pnpm -w format:fix"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.74",

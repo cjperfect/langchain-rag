@@ -2,36 +2,60 @@
   "name": "@langchain-rag/shared",
   "version": "1.0.0",
   "description": "Shared enums and types for langchain-rag",
-  "main": "./dist/index.js",
+  "type": "module",
+  "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "require": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    },
-    "./interfaces": {
-      "import": "./dist/interfaces/index.js",
-      "require": "./dist/interfaces/index.js",
-      "types": "./dist/interfaces/index.d.ts"
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./enums": {
-      "import": "./dist/enums/index.js",
-      "require": "./dist/enums/index.js",
-      "types": "./dist/enums/index.d.ts"
+      "import": {
+        "types": "./dist/enums/index.d.ts",
+        "default": "./dist/enums/index.js"
+      },
+      "require": {
+        "types": "./dist/enums/index.d.cts",
+        "default": "./dist/enums/index.cjs"
+      }
+    },
+    "./interfaces": {
+      "import": {
+        "types": "./dist/interfaces/index.d.ts",
+        "default": "./dist/interfaces/index.js"
+      },
+      "require": {
+        "types": "./dist/interfaces/index.d.cts",
+        "default": "./dist/interfaces/index.cjs"
+      }
     },
     "./constants": {
-      "import": "./dist/constants/index.js",
-      "require": "./dist/constants/index.js",
-      "types": "./dist/constants/index.d.ts"
+      "import": {
+        "types": "./dist/constants/index.d.ts",
+        "default": "./dist/constants/index.js"
+      },
+      "require": {
+        "types": "./dist/constants/index.d.cts",
+        "default": "./dist/constants/index.cjs"
+      }
     }
   },
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch"
+    "build": "tsup",
+    "dev": "tsup --watch"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "devDependencies": {
+    "tsup": "^8.5.1"
+  }
 }

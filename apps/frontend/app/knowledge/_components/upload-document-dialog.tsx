@@ -2,14 +2,7 @@
 
 import { useState, useRef, type DragEvent } from "react";
 import { Loader2, Upload, File, X } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
 // ---------------------------------------------------------------------------
@@ -82,9 +75,7 @@ export function UploadDocumentDialog({ open, onOpenChange, onUpload }: UploadDoc
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>上传文档</DialogTitle>
-          <DialogDescription>
-            支持 PDF、Markdown、Word、TXT、CSV、代码文件等格式，单个文件最大 50MB
-          </DialogDescription>
+          <DialogDescription>支持 PDF、Markdown、Word、TXT、CSV、代码文件等格式，单个文件最大 50MB</DialogDescription>
         </DialogHeader>
 
         <div className="py-2">
@@ -96,18 +87,9 @@ export function UploadDocumentDialog({ open, onOpenChange, onUpload }: UploadDoc
               </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{file.name}</p>
-                <p className="text-xs text-muted-foreground">
-                  {(file.size / 1024).toFixed(0)} KB
-                </p>
+                <p className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(0)} KB</p>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-7 shrink-0"
-                title="移除文件"
-                onClick={() => setFile(null)}
-                disabled={loading}
-              >
+              <Button variant="ghost" size="icon" className="size-7 shrink-0" title="移除文件" onClick={() => setFile(null)} disabled={loading}>
                 <X className="size-4" />
               </Button>
             </div>
@@ -122,17 +104,13 @@ export function UploadDocumentDialog({ open, onOpenChange, onUpload }: UploadDoc
               onDrop={handleDrop}
               onClick={() => inputRef.current?.click()}
               className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed p-10 transition-colors ${
-                dragging
-                  ? "border-primary bg-primary/5"
-                  : "border-border hover:border-muted-foreground/50 hover:bg-muted/20"
+                dragging ? "border-primary bg-primary/5" : "border-border hover:border-muted-foreground/50 hover:bg-muted/20"
               }`}
             >
               <Upload className="size-10 text-muted-foreground" strokeWidth={1.5} />
               <div className="text-center">
                 <p className="text-sm font-medium">拖拽文件到此处或点击选择</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  PDF · MD · DOCX · TXT · CSV · 代码文件
-                </p>
+                <p className="text-xs text-muted-foreground mt-1">PDF · MD · DOCX · TXT · CSV · 代码文件</p>
               </div>
               <input
                 ref={inputRef}

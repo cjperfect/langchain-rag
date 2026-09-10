@@ -37,9 +37,7 @@ export class ChatService {
     yield { event: "session", data: { session_id: conversationId } };
 
     // 确定父消息 ID（前端传了 parent_message_id 则用它，否则用 currentMessageId）
-    const parentMessageId = chatDto.parent_message_id
-      ? chatDto.parent_message_id
-      : Number(conv.currentMessageId);
+    const parentMessageId = chatDto.parent_message_id ? chatDto.parent_message_id : Number(conv.currentMessageId);
 
     // 3. 构建上下文（取父消息之前的历史）
     const ctx = await this.messageService.buildContext(conversationId, parentMessageId);
@@ -51,24 +49,18 @@ export class ChatService {
     });
 
     // 5. RAG 检索 + 组装上下文（kbIds 合并 knowledge_ids 和 knowledge_id 两个来源）
-    const kbIds = chatDto.knowledge_ids?.length
-      ? chatDto.knowledge_ids
-      : chatDto.knowledge_id != null
-        ? [chatDto.knowledge_id]
-        : [];
-    const { enhancedPrompt, retrievedDocs } = await this.buildRagContext(
-      chatDto.prompt,
-      kbIds,
-    );
+    const kbIds = chatDto.knowledge_ids?.length ? chatDto.knowledge_ids : chatDto.knowledge_id != null ? [chatDto.knowledge_id] : [];
+    const { enhancedPrompt, retrievedDocs } = await this.buildRagContext(chatDto.prompt, kbIds);
 
     // 从数据库查询知识库名称（向量 metadata 可能没有，旧数据兼容）
     const uniqueKbIds = [...new Set(retrievedDocs.map((d) => d.kbId))];
-    const kbs = uniqueKbIds.length > 0
-      ? await this.prisma.knowledgeBase.findMany({
-          where: { id: { in: uniqueKbIds } },
-          select: { id: true, name: true },
-        })
-      : [];
+    const kbs =
+      uniqueKbIds.length > 0
+        ? await this.prisma.knowledgeBase.findMany({
+            where: { id: { in: uniqueKbIds } },
+            select: { id: true, name: true },
+          })
+        : [];
     const idToName = new Map(kbs.map((k) => [k.id, k.name]));
 
     // 向客户端通知 RAG 检索结果（知识来源名称 + 结果数）
@@ -139,21 +131,11 @@ export class ChatService {
 
     // 7. 保存 AI 回复
     const rootId = Number(userMsg.rootId ?? userMsg.id);
-    const assistantMsg = await this.messageService.createAssistantMessage(
-      userId,
-      conversationId,
-      Number(userMsg.id),
-      rootId,
-      fullContent,
-      undefined,
-      outputTokens,
-    );
+    const assistantMsg = await this.messageService.createAssistantMessage(userId, conversationId, Number(userMsg.id), rootId, fullContent, undefined, outputTokens);
 
     // 8. 保存 RAG 检索引用
     if (retrievedDocs.length > 0) {
-      await this.messageService
-        .saveRagReferences(Number(assistantMsg.id), retrievedDocs)
-        .catch((err) => console.error("[Chat] 保存 RAG 引用失败:", err));
+      await this.messageService.saveRagReferences(Number(assistantMsg.id), retrievedDocs).catch((err) => console.error("[Chat] 保存 RAG 引用失败:", err));
     }
 
     // 9. 保存上下文快照
@@ -201,10 +183,7 @@ export class ChatService {
   }
 
   /** RAG 检索 + 组装上下文 */
-  private async buildRagContext(
-    prompt: string,
-    kbIds?: number[],
-  ): Promise<{ enhancedPrompt: string; retrievedDocs: RagSearchResult[] }> {
+  private async buildRagContext(prompt: string, kbIds?: number[]): Promise<{ enhancedPrompt: string; retrievedDocs: RagSearchResult[] }> {
     if (!kbIds?.length) return { enhancedPrompt: prompt, retrievedDocs: [] };
 
     const retrievedDocs = await ragService.search(prompt, { kbIds, k: 5 }).catch((err) => {

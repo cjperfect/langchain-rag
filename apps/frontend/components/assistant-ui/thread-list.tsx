@@ -1,37 +1,13 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import {
-  AuiIf,
-  ThreadListItemMorePrimitive,
-  ThreadListItemPrimitive,
-  ThreadListPrimitive,
-  useAuiState,
-  useThreadListItemRuntime,
-} from "@assistant-ui/react";
+import { AuiIf, ThreadListItemMorePrimitive, ThreadListItemPrimitive, ThreadListPrimitive, useAui, useAuiState } from "@assistant-ui/react";
 import { MoreHorizontalIcon, PencilIcon, PlusIcon, SearchIcon, TrashIcon } from "lucide-react";
-import {
-  forwardRef,
-  Fragment,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ComponentPropsWithoutRef,
-  type FC,
-} from "react";
+import { forwardRef, Fragment, useCallback, useEffect, useMemo, useRef, useState, type ComponentPropsWithoutRef, type FC } from "react";
 
 export const ThreadList: FC = () => {
   const [search, setSearch] = useState("");
@@ -55,10 +31,7 @@ export const ThreadListSearch = forwardRef<
 >(({ className, value, onValueChange, ...props }, ref) => {
   return (
     <div data-slot="aui_thread-list-search" className="relative px-0.5 py-1">
-      <SearchIcon
-        data-slot="aui_thread-list-search-icon"
-        className="text-muted-foreground pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2"
-      />
+      <SearchIcon data-slot="aui_thread-list-search-icon" className="text-muted-foreground pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2" />
       <Input
         ref={ref}
         type="search"
@@ -75,30 +48,13 @@ export const ThreadListSearch = forwardRef<
 
 ThreadListSearch.displayName = "ThreadListSearch";
 
-export const ThreadListRoot: FC<ComponentPropsWithoutRef<typeof ThreadListPrimitive.Root>> = ({
-  className,
-  ...props
-}) => {
-  return (
-    <ThreadListPrimitive.Root
-      data-slot="aui_thread-list-root"
-      className={cn("flex flex-col gap-0.5", className)}
-      {...props}
-    />
-  );
+export const ThreadListRoot: FC<ComponentPropsWithoutRef<typeof ThreadListPrimitive.Root>> = ({ className, ...props }) => {
+  return <ThreadListPrimitive.Root data-slot="aui_thread-list-root" className={cn("flex flex-col gap-0.5", className)} {...props} />;
 };
 
-export const ThreadListItems: FC<ComponentPropsWithoutRef<"div"> & { searchQuery?: string }> = ({
-  className,
-  searchQuery = "",
-  ...props
-}) => {
+export const ThreadListItems: FC<ComponentPropsWithoutRef<"div"> & { searchQuery?: string }> = ({ className, searchQuery = "", ...props }) => {
   return (
-    <div
-      data-slot="aui_thread-list-items"
-      className={cn("flex flex-col gap-0.5", className)}
-      {...props}
-    >
+    <div data-slot="aui_thread-list-items" className={cn("flex flex-col gap-0.5", className)} {...props}>
       <AuiIf condition={(s) => s.threads.isLoading}>
         <ThreadListSkeleton />
       </AuiIf>
@@ -133,9 +89,7 @@ const ThreadListItemGroups: FC<{ searchQuery?: string }> = ({ searchQuery = "" }
     const itemsById = new Map(threadItems.map((item) => [item.id, item]));
     const filteredIndices = threadIds
       .map((id, index) => ({ id, index }))
-      .filter(
-        ({ id }) => !query || (itemsById.get(id)?.title ?? "新会话").toLowerCase().includes(query),
-      )
+      .filter(({ id }) => !query || (itemsById.get(id)?.title ?? "新会话").toLowerCase().includes(query))
       .map(({ index }) => index);
 
     if (filteredIndices.length === 0) return { filteredIndices, groups: [] };
@@ -178,54 +132,40 @@ const ThreadListItemGroups: FC<{ searchQuery?: string }> = ({ searchQuery = "" }
 
   return groups.map((group) => (
     <Fragment key={group.label}>
-      <div
-        data-slot="aui_thread-list-group-label"
-        className="text-muted-foreground px-2.5 pt-3 pb-1 text-xs font-medium"
-      >
+      <div data-slot="aui_thread-list-group-label" className="text-muted-foreground px-2.5 pt-3 pb-1 text-xs font-medium">
         {group.label}
       </div>
       {group.indices.map((index) => (
-        <ThreadListPrimitive.ItemByIndex
-          key={threadIds[index]}
-          index={index}
-          components={{ ThreadListItem }}
-        />
+        <ThreadListPrimitive.ItemByIndex key={threadIds[index]} index={index} components={{ ThreadListItem }} />
       ))}
     </Fragment>
   ));
 };
 
-export const ThreadListNew = forwardRef<
-  HTMLButtonElement,
-  ComponentPropsWithoutRef<typeof Button> & { labelClassName?: string }
->(({ className, labelClassName, children, ...props }, ref) => {
-  return (
-    <ThreadListPrimitive.New asChild>
-      <Button
-        ref={ref}
-        variant="ghost"
-        data-slot="aui_thread-list-new"
-        className={cn(
-          "hover:bg-muted data-active:bg-muted h-8 justify-start gap-2 rounded-md px-2.5 text-sm font-normal",
-          className,
-        )}
-        {...props}
-      >
-        {children ?? (
-          <>
-            <PlusIcon data-slot="aui_thread-list-new-icon" className="size-4 shrink-0" />
-            <span
-              data-slot="aui_thread-list-new-label"
-              className={cn("whitespace-nowrap", labelClassName)}
-            >
-              新会话
-            </span>
-          </>
-        )}
-      </Button>
-    </ThreadListPrimitive.New>
-  );
-});
+export const ThreadListNew = forwardRef<HTMLButtonElement, ComponentPropsWithoutRef<typeof Button> & { labelClassName?: string }>(
+  ({ className, labelClassName, children, ...props }, ref) => {
+    return (
+      <ThreadListPrimitive.New asChild>
+        <Button
+          ref={ref}
+          variant="ghost"
+          data-slot="aui_thread-list-new"
+          className={cn("hover:bg-muted data-active:bg-muted h-8 justify-start gap-2 rounded-md px-2.5 text-sm font-normal", className)}
+          {...props}
+        >
+          {children ?? (
+            <>
+              <PlusIcon data-slot="aui_thread-list-new-icon" className="size-4 shrink-0" />
+              <span data-slot="aui_thread-list-new-label" className={cn("whitespace-nowrap", labelClassName)}>
+                新会话
+              </span>
+            </>
+          )}
+        </Button>
+      </ThreadListPrimitive.New>
+    );
+  },
+);
 
 ThreadListNew.displayName = "ThreadListNew";
 
@@ -233,13 +173,7 @@ const ThreadListSkeleton: FC = () => {
   return (
     <div className="flex flex-col gap-0.5">
       {Array.from({ length: 5 }, (_, i) => (
-        <div
-          key={i}
-          role="status"
-          aria-label="加载会话列表"
-          data-slot="aui_thread-list-skeleton-wrapper"
-          className="flex h-8 items-center px-2.5"
-        >
+        <div key={i} role="status" aria-label="加载会话列表" data-slot="aui_thread-list-skeleton-wrapper" className="flex h-8 items-center px-2.5">
           <Skeleton data-slot="aui_thread-list-skeleton" className="h-3.5 w-full" />
         </div>
       ))}
@@ -248,7 +182,8 @@ const ThreadListSkeleton: FC = () => {
 };
 
 export const ThreadListItem: FC = () => {
-  const runtime = useThreadListItemRuntime();
+  const aui = useAui();
+  const title = useAuiState((s) => s.threadListItem.title);
   const [isRenaming, setIsRenaming] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -258,11 +193,11 @@ export const ThreadListItem: FC = () => {
 
   const commitRename = useCallback(() => {
     const newTitle = inputRef.current?.value.trim();
-    if (newTitle && newTitle !== (runtime.getState().title ?? "")) {
-      runtime.rename(newTitle);
+    if (newTitle && newTitle !== (title ?? "")) {
+      void aui.threadListItem.rename(newTitle);
     }
     setIsRenaming(false);
-  }, [runtime]);
+  }, [aui, title]);
 
   useEffect(() => {
     if (isRenaming) {
@@ -287,7 +222,7 @@ export const ThreadListItem: FC = () => {
           <input
             ref={inputRef}
             data-slot="aui_thread-list-item-rename-input"
-            defaultValue={runtime.getState().title ?? ""}
+            defaultValue={title ?? ""}
             onBlur={commitRename}
             onKeyDown={(e) => {
               if (e.key === "Enter") commitRename();
@@ -307,13 +242,13 @@ export const ThreadListItem: FC = () => {
 };
 
 const ThreadListItemMore: FC<{ onRequestRename: () => void }> = ({ onRequestRename }) => {
-  const runtime = useThreadListItemRuntime();
+  const aui = useAui();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const handleDelete = useCallback(() => {
     setDeleteDialogOpen(false);
-    runtime.delete();
-  }, [runtime]);
+    void aui.threadListItem.delete();
+  }, [aui]);
 
   return (
     <>
@@ -360,9 +295,7 @@ const ThreadListItemMore: FC<{ onRequestRename: () => void }> = ({ onRequestRena
         <DialogContent>
           <DialogHeader>
             <DialogTitle>确认删除</DialogTitle>
-            <DialogDescription>
-              此操作不可撤销。确定要删除这个会话吗？
-            </DialogDescription>
+            <DialogDescription>此操作不可撤销。确定要删除这个会话吗？</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>

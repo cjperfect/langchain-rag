@@ -1,15 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Patch,
-  Delete,
-  Param,
-  Body,
-  Query,
-  UseGuards,
-  ParseIntPipe,
-} from "@nestjs/common";
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, ParseIntPipe } from "@nestjs/common";
 import { ConversationService } from "./conversation.service";
 import type { CreateConversationDto, UpdateConversationDto, GenerateTitleDto } from "./dto/conversation.dto";
 // TODO: 临时跳过登录校验
@@ -28,10 +17,7 @@ export class ConversationController {
   }
 
   @Get()
-  async list(
-    @CurrentUser() user: { id: number },
-    @Query("knowledge_id") knowledgeId?: string,
-  ) {
+  async list(@CurrentUser() user: { id: number }, @Query("knowledge_id") knowledgeId?: string) {
     return this.conversationService.list(user.id, knowledgeId ? Number(knowledgeId) : undefined);
   }
 

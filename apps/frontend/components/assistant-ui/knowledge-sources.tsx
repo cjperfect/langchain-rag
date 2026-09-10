@@ -30,9 +30,7 @@ function dedupeSources(sources: RagSource[]): RagSource[] {
 }
 
 export const KnowledgeSources: FC = () => {
-  const rawSources = useAuiState(
-    (s) => (s.message.metadata?.custom?.rag_sources as RagSource[]) ?? EMPTY_SOURCES,
-  );
+  const rawSources = useAuiState((s) => (s.message.metadata?.custom?.rag_sources as RagSource[]) ?? EMPTY_SOURCES);
 
   // 去重 + 分组，只在 rawSources 变化时重算
   const grouped = useMemo(() => {

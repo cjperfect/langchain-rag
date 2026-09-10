@@ -61,20 +61,14 @@ export class MessageService {
   }
 
   /** 创建用户消息 */
-  async createUserMessage(
-    userId: number,
-    conversationId: number,
-    dto: SendMessageDto,
-  ) {
+  async createUserMessage(userId: number, conversationId: number, dto: SendMessageDto) {
     const conv = await this.prisma.chatConversation.findUnique({
       where: { id: conversationId },
     });
     if (!conv) throw Exceptions.notFound("会话不存在");
 
     // 确定父消息
-    const parentId = dto.rootId
-      ? await this.findBranchTail(conversationId, dto.rootId)
-      : conv.currentMessageId;
+    const parentId = dto.rootId ? await this.findBranchTail(conversationId, dto.rootId) : conv.currentMessageId;
 
     // 确定分支根：有父消息则继承其 root_id，否则（首条消息）以自身为根
     let rootId: bigint | null = null;
@@ -112,15 +106,7 @@ export class MessageService {
   }
 
   /** 创建 assistant 消息 */
-  async createAssistantMessage(
-    userId: number,
-    conversationId: number,
-    parentId: number,
-    rootId: number,
-    content: string,
-    reasoningContent?: string,
-    tokenCount?: number,
-  ) {
+  async createAssistantMessage(userId: number, conversationId: number, parentId: number, rootId: number, content: string, reasoningContent?: string, tokenCount?: number) {
     return this.prisma.chatMessage.create({
       data: {
         userId,
@@ -253,10 +239,7 @@ export class MessageService {
   }
 
   /** 保存 RAG 检索引用 */
-  async saveRagReferences(
-    messageId: number,
-    references: RagSearchResult[],
-  ): Promise<void> {
+  async saveRagReferences(messageId: number, references: RagSearchResult[]): Promise<void> {
     await this.prisma.chatRagReference.createMany({
       data: references.map((ref) => ({
         messageId,

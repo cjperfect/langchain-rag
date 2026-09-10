@@ -3,31 +3,16 @@
 import { Library, Plus, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import type { KnowledgeListProps } from "@/interfaces/knowledge";
 
-export function KnowledgeList({
-  items,
-  selectedId,
-  loading,
-  onSelect,
-  onCreateClick,
-  onEdit,
-  onDelete,
-}: KnowledgeListProps) {
+export function KnowledgeList({ items, selectedId, loading, onSelect, onCreateClick, onEdit, onDelete }: KnowledgeListProps) {
   return (
     <div className="flex h-full flex-col bg-background border-r">
       {/* 顶栏 */}
       <div className="flex shrink-0 items-center justify-between border-b px-4 py-3">
-        <span className="text-xs font-medium text-muted-foreground">
-          {loading ? <Skeleton className="h-3 w-12" /> : `${items.length} 个知识库`}
-        </span>
+        <span className="text-xs font-medium text-muted-foreground">{loading ? <Skeleton className="h-3 w-12" /> : `${items.length} 个知识库`}</span>
         <Button variant="ghost" size="icon" className="size-7" onClick={onCreateClick}>
           <Plus className="size-4" />
         </Button>
@@ -57,18 +42,12 @@ export function KnowledgeList({
             {items.map((kb) => (
               <div
                 key={kb.id}
-                className={cn(
-                  "group flex w-full items-center gap-1 rounded-lg text-left text-sm transition-colors",
-                  selectedId === kb.id ? "bg-muted" : "hover:bg-muted/50",
-                )}
+                className={cn("group flex w-full items-center gap-1 rounded-lg text-left text-sm transition-colors", selectedId === kb.id ? "bg-muted" : "hover:bg-muted/50")}
               >
                 <button
                   type="button"
                   onClick={() => onSelect(kb.id)}
-                  className={cn(
-                    "flex flex-1 items-center gap-3 px-3 py-2.5 cursor-pointer min-w-0",
-                    selectedId === kb.id && "font-medium",
-                  )}
+                  className={cn("flex flex-1 items-center gap-3 px-3 py-2.5 cursor-pointer min-w-0", selectedId === kb.id && "font-medium")}
                 >
                   <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
                     <Library className="size-3.5" />
@@ -81,12 +60,7 @@ export function KnowledgeList({
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity mr-1"
-                      onClick={(e) => e.stopPropagation()}
-                    >
+                    <Button variant="ghost" size="icon" className="size-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity mr-1" onClick={(e) => e.stopPropagation()}>
                       <MoreHorizontal className="size-3.5" />
                     </Button>
                   </DropdownMenuTrigger>
