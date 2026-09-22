@@ -66,6 +66,6 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "tsup": "^8.5.1"
+    "tsup": "catalog:"
   }
 }

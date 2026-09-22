@@ -19,13 +19,13 @@
     "@langchain/openai": "^1.5.5",
     "@langchain/textsplitters": "^1.0.1",
     "d3-dsv": "^2.0.0",
-    "dotenv": "^17.4.2",
+    "dotenv": "catalog:",
     "langchain": "^1.5.3",
     "pdf-parse": "^2.4.5",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "nodemon": "^3.1.1",
-    "tsup": "^8.5.1"
+    "tsup": "catalog:"
   }
 }

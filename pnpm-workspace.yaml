@@ -10,3 +10,37 @@ allowBuilds:
   unrs-resolver: set this to true or false
 minimumReleaseAgeExclude:
   - "@langchain/core@1.2.3"
+
+# 统一依赖版本目录：存放跨子包通用包与 TypeScript 相关包（工具链 + 类型定义），各包 package.json 通过 "catalog:" 引用
+catalog:
+  # 跨子包通用
+  dotenv: "^17.4.2"
+  tsup: "^8.5.1"
+
+  # TypeScript 工具链与类型定义
+  "@types/bcryptjs": "^3.0.0"
+  "@types/express": "^5.0.0"
+  "@types/jest": "^30.0.0"
+  "@types/multer": "^2.2.0"
+  "@types/node": "^26.0.0"
+  "@types/passport-jwt": "^4.0.1"
+  "@types/react": "^19.2.17"
+  "@types/react-dom": "^19.2.3"
+  "@types/supertest": "^7.0.0"
+  "@types/turndown": "^5.0.6"
+  ts-jest: "^29.2.5"
+  ts-loader: "^9.5.2"
+  ts-node: "^10.9.2"
+  tsconfig-paths: "^4.2.0"
+  typescript: "^6.0.3"
+  typescript-eslint: "^8.70.0"
+
+  # 工程化：lint / format 工具链
+  "@eslint/js": "^9.39.5"
+  "@next/eslint-plugin-next": "^16.3.4"
+  eslint: "^9.39.5"
+  eslint-config-prettier: "^10.1.8"
+  eslint-plugin-react: "^7.37.5"
+  eslint-plugin-react-hooks: "^7.1.1"
+  globals: "^17.12.0"
+  prettier: "^3.9.6"
