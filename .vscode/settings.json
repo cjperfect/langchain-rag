@@ -1,9 +1,4 @@
 {
-  "editor.fontSize": 16,
-  "terminal.integrated.fontSize": 14,
-  "terminal.integrated.fontFamily": "MesloLGS NF",
-  "workbench.iconTheme": "vscode-icons",
-
   // 格式化统一走 Prettier
   "editor.defaultFormatter": "esbenp.prettier-vscode",
   "editor.formatOnSave": true,

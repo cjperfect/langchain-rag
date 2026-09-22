@@ -8,6 +8,12 @@ export interface ChunkData {
   tokenCount: number;
 }
 
+/** 检索模式：混合（语义+BM25，RRF 融合）/ 纯语义 / 纯关键词 */
+export type RagSearchMode = "hybrid" | "semantic" | "keyword";
+
+/** 结果的命中来源 */
+export type RagMatchType = "semantic" | "keyword" | "both";
+
 /** 检索结果 */
 export interface RagSearchResult {
   /** chunk 文本内容 */
@@ -20,8 +26,16 @@ export interface RagSearchResult {
   kbName?: string;
   /** 文档文件名 */
   documentName?: string;
-  /** 余弦相似度 (0~1，越高越相似) */
+  /** 切片在文档内的序号（用于混合检索时跨两路结果去重合并） */
+  chunkIndex?: number;
+  /**
+   * semantic 模式下是余弦相似度 (0~1)；
+   * hybrid 模式下是 RRF 融合分归一化到 0~1（两路都排名第 1 ≈ 1.0，单路第一 ≈ 0.5）；
+   * keyword 模式下是 BM25 原始分（无上界）
+   */
   score: number;
+  /** 命中来源 */
+  matchType: RagMatchType;
 }
 
 /** PGVectorStore 中存储的 metadata */

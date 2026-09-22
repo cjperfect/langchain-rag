@@ -7,6 +7,7 @@ export default defineConfig({
     "src/enums/index.ts",
     "src/interfaces/index.ts",
     "src/constants/index.ts",
+    "src/events/index.ts",
   ],
   format: ["cjs", "esm"], // 后端 Nest(CJS) 与 ai-engine(ESM) 都需要
   splitting: false, // 该包只有类型与常量，无需代码分割

@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { ConversationService } from "../conversation/conversation.service";
 import { MessageService } from "../message/message.service";
 import { PrismaService } from "../prisma/prisma.service";
-import { AiEngine, ragService } from "@langchain-rag/ai-engine";
+import { AiEngine } from "@langchain-rag/ai-engine";
 import type { RagSearchResult } from "@langchain-rag/ai-engine";
 import { BusinessException } from "../common/exceptions/business.exception";
 import { ErrorCode } from "@langchain-rag/shared";
@@ -48,33 +48,9 @@ export class ChatService {
       rootId: chatDto.parent_message_id,
     });
 
-    // 5. RAG 检索 + 组装上下文（kbIds 合并 knowledge_ids 和 knowledge_id 两个来源）
+    // 5. 检索作用域：是否检索、检索几次都由 agent 决定，这里只声明「允许检索哪些库」
+    //    （kbIds 合并 knowledge_ids 和 knowledge_id 两个来源）
     const kbIds = chatDto.knowledge_ids?.length ? chatDto.knowledge_ids : chatDto.knowledge_id != null ? [chatDto.knowledge_id] : [];
-    const { enhancedPrompt, retrievedDocs } = await this.buildRagContext(chatDto.prompt, kbIds);
-
-    // 从数据库查询知识库名称（向量 metadata 可能没有，旧数据兼容）
-    const uniqueKbIds = [...new Set(retrievedDocs.map((d) => d.kbId))];
-    const kbs =
-      uniqueKbIds.length > 0
-        ? await this.prisma.knowledgeBase.findMany({
-            where: { id: { in: uniqueKbIds } },
-            select: { id: true, name: true },
-          })
-        : [];
-    const idToName = new Map(kbs.map((k) => [k.id, k.name]));
-
-    // 向客户端通知 RAG 检索结果（知识来源名称 + 结果数）
-    if (retrievedDocs.length > 0) {
-      yield {
-        event: "knowledge_search",
-        data: {
-          query: chatDto.prompt,
-          kbIds,
-          results: `共检索到 ${retrievedDocs.length} 条相关文档片段`,
-          kbNames: uniqueKbIds.map((id) => idToName.get(id) ?? `知识库#${id}`),
-        },
-      };
-    }
 
     // 6. 调用 AI 引擎，流式输出（模型每消息可选切换）
     const startTime = Date.now();
@@ -82,11 +58,14 @@ export class ChatService {
     let fullReasoning = "";
     let inputTokens = 0;
     let outputTokens = 0;
+    // agent 可能多次调用检索工具（改写重试），累计去重后作为本轮的知识来源
+    const docMap = new Map<string, RagSearchResult>();
 
     try {
-      const stream = this.aiEngine.streamEvents(enhancedPrompt, {
+      const stream = this.aiEngine.streamEvents(chatDto.prompt, {
         history: ctx.messages as ContextMessage[],
         model: chatDto.model,
+        kbIds,
       });
 
       for await (const event of stream) {
@@ -105,13 +84,15 @@ export class ChatService {
             };
             break;
           case "knowledge_search":
-            // 只转发 agent 自己的 knowledge_search（pre-search 已在前面发过）
-            if (event.query === "") {
-              yield {
-                event: "knowledge_search",
-                data: { query: event.query, kbIds: event.kbIds, kbNames: event.kbNames, results: event.results },
-              };
+            // tool_start 的事件带 query/kbIds（前端据此先亮出知识来源），
+            // tool_end 的事件带 kbNames/results/docs，两个都转发。
+            for (const doc of event.docs ?? []) {
+              docMap.set(`${doc.kbId}:${doc.documentId}:${doc.chunkIndex ?? ""}:${doc.content}`, doc);
             }
+            yield {
+              event: "knowledge_search",
+              data: { query: event.query, kbIds: event.kbIds, kbNames: event.kbNames, results: event.results },
+            };
             break;
           case "token":
             fullContent += event.content;
@@ -120,7 +101,8 @@ export class ChatService {
         }
       }
 
-      inputTokens = Math.ceil(enhancedPrompt.length / 4);
+      // 现在实际送进模型的是用户原话加历史消息，不再是拼接后的 enhancedPrompt
+      inputTokens = Math.ceil(chatDto.prompt.length / 4);
       outputTokens = Math.ceil((fullContent + fullReasoning).length / 4);
     } catch (error) {
       yield { event: "error", data: { error: String(error) } };
@@ -128,6 +110,18 @@ export class ChatService {
     }
 
     const latency = Date.now() - startTime;
+
+    // 7. 汇总知识来源：从数据库补名称（向量 metadata 可能没有，旧数据兼容）
+    const retrievedDocs = [...docMap.values()];
+    const uniqueKbIds = [...new Set(retrievedDocs.map((d) => d.kbId))];
+    const kbs =
+      uniqueKbIds.length > 0
+        ? await this.prisma.knowledgeBase.findMany({
+            where: { id: { in: uniqueKbIds } },
+            select: { id: true, name: true },
+          })
+        : [];
+    const idToName = new Map(kbs.map((k) => [k.id, k.name]));
 
     // 7. 保存 AI 回复
     const rootId = Number(userMsg.rootId ?? userMsg.id);
@@ -182,27 +176,4 @@ export class ChatService {
     };
   }
 
-  /** RAG 检索 + 组装上下文 */
-  private async buildRagContext(prompt: string, kbIds?: number[]): Promise<{ enhancedPrompt: string; retrievedDocs: RagSearchResult[] }> {
-    if (!kbIds?.length) return { enhancedPrompt: prompt, retrievedDocs: [] };
-
-    const retrievedDocs = await ragService.search(prompt, { kbIds, k: 5 }).catch((err) => {
-      console.error("[Chat] RAG 检索失败:", err);
-      return [];
-    });
-
-    if (retrievedDocs.length === 0) return { enhancedPrompt: prompt, retrievedDocs: [] };
-
-    const ragContext = retrievedDocs
-      .map(
-        (d, i) =>
-          `<document index="${i + 1}" source="${d.kbName ?? `知识库#${d.kbId}`}/${d.documentName ?? `文档#${d.documentId}`}" score="${d.score.toFixed(4)}">\n${d.content}\n</document>`,
-      )
-      .join("\n\n");
-
-    return {
-      enhancedPrompt: `${prompt}\n\n<documents>\n${ragContext}\n</documents>`,
-      retrievedDocs,
-    };
-  }
 }

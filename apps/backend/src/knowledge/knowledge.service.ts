@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, InternalServerErrorException } from "@nestjs/common";
 import { writeFileSync, unlinkSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -120,15 +120,21 @@ export class KnowledgeService {
       },
     });
 
-    // ai-engine 全权处理切片 + 向量化（存入 KB 名称 + 文档名，便于检索时展示来源）
+    // ai-engine 全权处理切片 + 向量化（存入 KB 名称 + 文档名，便于检索时展示来源）。
+    // 索引失败必须回滚文档记录：否则会留下 chunkCount=0 的幽灵文档 ——
+    // HTTP 返回成功、列表里看得见，但内容永远搜不到，删除时还会再撞一次同样的向量错误。
     const chunks = await ragService
       .indexDocument(kbId, doc.id, dto.content, {
         kbName: kb.name,
         documentName: dto.fileName,
       })
-      .catch((err) => {
-        this.logger.error(`文档 ${doc.id} 向量索引失败`, err);
-        return [];
+      .catch(async (err) => {
+        const reason = err instanceof Error ? err.message : String(err);
+        this.logger.error(`文档 ${doc.id} 向量索引失败，已回滚文档记录`, err);
+        await this.discardUnindexedDocument(doc.id);
+        // 包成 HttpException，让 HTTP 层也返回真实原因 ——
+        // 否则全局过滤器只给出笼统的“服务器内部错误”，前端无从判断
+        throw new InternalServerErrorException(`文档索引失败：${reason}`);
       });
 
     // 写入切片记录
@@ -157,6 +163,23 @@ export class KnowledgeService {
       where: { id: doc.id },
       data: { chunkCount: chunks.length },
     });
+  }
+
+  /**
+   * 索引失败时丢弃刚建的文档记录
+   *
+   * 向量清理是尽力而为：索引可能失败在「向量库还没写进去」这一步
+   * （例如扩展缺失），此时清理本身也会失败，不能因此盖住原始错误。
+   */
+  private async discardUnindexedDocument(docId: number) {
+    try {
+      await ragService.deleteByDocumentId(docId);
+    } catch (err) {
+      this.logger.warn(`回滚文档 ${docId} 时清理向量失败（多半是没写入过）: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    await this.prisma.knowledgeChunk.deleteMany({ where: { documentId: docId } });
+    await this.prisma.knowledgeDocument.delete({ where: { id: docId } });
   }
 
   /** 获取文档切片 */
@@ -236,25 +259,21 @@ export class KnowledgeService {
     if (dto.content !== undefined) {
       const fileSize = Buffer.byteLength(dto.content, "utf-8");
 
-      // 删除旧切片记录
-      await this.prisma.knowledgeChunk.deleteMany({ where: { documentId: docId } });
-
       // 获取 KB 名称用于向量 metadata
       const kb = await this.get(doc.knowledgeBaseId);
       const fileName = dto.fileName ?? doc.fileName;
 
-      // ai-engine 全权处理：删旧向量 + 重新切片 + 向量化
-      const chunks = await ragService
-        .reindexDocument(docId, doc.knowledgeBaseId, dto.content, {
-          kbName: kb.name,
-          documentName: fileName,
-        })
-        .catch((err) => {
-          this.logger.error(`文档 ${docId} 重建索引失败`, err);
-          return [];
-        });
+      // ai-engine 全权处理：删旧向量 + 重新切片 + 向量化。
+      // 必须放在删旧切片之前 —— 索引失败时直接抛错，原有切片与内容保持不变，
+      // 不会出现「内容还在、切片记录被清空」的静默数据丢失。
+      const chunks = await ragService.reindexDocument(docId, doc.knowledgeBaseId, dto.content, {
+        kbName: kb.name,
+        documentName: fileName,
+      });
 
-      // 写入新切片记录
+      // 索引成功后再替换切片记录
+      await this.prisma.knowledgeChunk.deleteMany({ where: { documentId: docId } });
+
       if (chunks.length > 0) {
         await this.prisma.knowledgeChunk.createMany({
           data: chunks.map((c) => ({

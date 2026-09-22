@@ -6,6 +6,9 @@ import type { CreateKnowledgeBaseDto, UpdateKnowledgeBaseDto, CreateDocumentDto,
 // import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
 
+/** 单文件上传上限，与前端「单个文件最大 50MB」提示对齐 */
+const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
+
 @Controller("api/knowledge")
 // TODO: 临时跳过登录校验
 // @UseGuards(JwtAuthGuard)
@@ -56,7 +59,8 @@ export class KnowledgeController {
   }
 
   @Post(":id/upload")
-  @UseInterceptors(FileInterceptor("file"))
+  // 限制与前端提示保持一致（50MB）：超限时直接返回 413，而不是把文件读到内存里再失败
+  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: MAX_UPLOAD_SIZE } }))
   async uploadDocument(@Param("id", ParseIntPipe) id: number, @CurrentUser() user: { id: number }, @UploadedFile() file: { buffer: Buffer; originalname: string; size: number }) {
     return this.knowledgeService.uploadDocument(id, user.id, {
       fileName: file.originalname,

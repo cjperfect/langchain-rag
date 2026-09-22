@@ -1,6 +1,8 @@
 services:
   postgres:
-    image: postgres:17
+    # 必须使用带 pgvector 的镜像：官方 postgres:17 不含 vector 扩展，
+    # 会导致 PGVectorStore 初始化报 'extension "vector" is not available'
+    image: pgvector/pgvector:pg17
     container_name: langchain-rag-postgres
     environment:
       POSTGRES_USER: root
