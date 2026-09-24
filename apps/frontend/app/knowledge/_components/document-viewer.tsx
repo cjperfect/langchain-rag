@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, Pencil, Save, X } from "lucide-react";
+import { FileText, Pencil, Save, X, List } from "lucide-react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
@@ -10,6 +10,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { RichTextEditor, htmlToMd } from "@/components/rich-text-editor";
 import { updateDocument } from "@/api/knowledge-api";
+import { ChunksDialog } from "./chunks-dialog";
+import { TaskProgressPanel } from "./task-progress";
 import type { DocumentViewerProps } from "@/interfaces/knowledge";
 
 // ---------------------------------------------------------------------------
@@ -67,8 +69,20 @@ const markdownComponents: ComponentProps<typeof Markdown>["components"] = {
 export function DocumentViewer({ content, fileName, loading, knowledgeBaseId, documentId, onSaved }: DocumentViewerProps) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [chunksOpen, setChunksOpen] = useState(false);
+  // 保存后的重建索引进度（SSE 事件驱动；更新场景步骤：重建索引 → 切片 → 向量化）
+  const [progressActive, setProgressActive] = useState(false);
+  const [fallbackDone, setFallbackDone] = useState(false);
+  const [fallbackError, setFallbackError] = useState<string | null>(null);
+  const [resetKey, setResetKey] = useState(0);
   const editorRef = useRef<ReturnType<typeof import("@tiptap/react").useEditor>>(null);
-  const fullText = content ?? "";
+
+  // 解析产物多为「一行一换行」的行式文本（pdf-parse 逐行输出 / OCR 版面重组）。
+  // CommonMark 会把单个换行折叠成空格、只有空行才分段 —— 直接喂给 react-markdown
+  // 会导致预览时段落全部挤在一起。渲染前把单个换行提升为空行（段落分隔）：
+  //   \n   → \n\n（单换行升级为分段）
+  //   \n\n → \n\n（已有空行保持不变，避免重复分段）
+  const fullText = (content ?? "").replace(/\n{1,2}/g, "\n\n");
 
   const canEdit = knowledgeBaseId != null && documentId != null;
 
@@ -83,17 +97,28 @@ export function DocumentViewer({ content, fileName, loading, knowledgeBaseId, do
   const handleSave = useCallback(async () => {
     if (!canEdit || saving) return;
     setSaving(true);
+    setResetKey((k) => k + 1);
+    setProgressActive(true);
+    setFallbackDone(false);
+    setFallbackError(null);
     try {
       const md = editorRef.current?.getMarkdown?.() ?? htmlToMd(editorRef.current?.getHTML?.() ?? "");
-      await updateDocument(knowledgeBaseId!, documentId!, { content: md });
-      setEditing(false);
-      onSaved?.();
-    } catch {
-      // 保存失败保持编辑状态
-    } finally {
+      await updateDocument(documentId!, { content: md });
+      // HTTP 成功即重建成功：SSE 无事件时用它兜底；留一点时间让事件渲染
+      setFallbackDone(true);
+      setTimeout(() => {
+        setEditing(false);
+        setProgressActive(false);
+        setSaving(false);
+        onSaved?.();
+      }, 600);
+    } catch (e) {
+      // 失败保持编辑状态可重试；SSE failed 的具体原因优先
+      setFallbackError(e instanceof Error ? e.message : "保存失败，请重试");
+      setProgressActive(false);
       setSaving(false);
     }
-  }, [canEdit, saving, knowledgeBaseId, documentId, onSaved]);
+  }, [canEdit, saving, documentId, onSaved]);
 
   // 空状态
   if (!fileName) {
@@ -139,9 +164,14 @@ export function DocumentViewer({ content, fileName, loading, knowledgeBaseId, do
           <FileText className="size-4 text-muted-foreground" />
           <h2 className="flex-1 text-sm font-semibold">{fileName}</h2>
           {!editing && canEdit && (
-            <Button variant="ghost" size="icon" className="size-7" onClick={startEdit} title="编辑">
-              <Pencil className="size-3.5" />
-            </Button>
+            <>
+              <Button variant="ghost" size="icon" className="size-7" onClick={() => setChunksOpen(true)} title="查看切片">
+                <List className="size-3.5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="size-7" onClick={startEdit} title="编辑">
+                <Pencil className="size-3.5" />
+              </Button>
+            </>
           )}
           {editing && (
             <>
@@ -159,9 +189,28 @@ export function DocumentViewer({ content, fileName, loading, knowledgeBaseId, do
 
       {/* 正文区域 */}
       {editing ? (
-        <div className="flex-1 overflow-y-auto p-6">
-          <RichTextEditor initialContent={fullText} placeholder="编辑文档内容（支持 Markdown 快捷键）..." minHeight="60vh" editorRef={editorRef} />
-        </div>
+        progressActive ? (
+          <div className="flex-1 overflow-y-auto p-6">
+            <TaskProgressPanel
+              enabled={progressActive}
+              active={progressActive}
+              labels={["重建索引", "切片", "向量化", "完成"]}
+              fallbackDone={fallbackDone}
+              fallbackError={fallbackError}
+              resetKey={resetKey}
+              onCompleted={() => {
+                setEditing(false);
+                setProgressActive(false);
+                setSaving(false);
+                onSaved?.();
+              }}
+            />
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto p-6">
+            <RichTextEditor initialContent={fullText} placeholder="编辑文档内容（支持 Markdown 快捷键）..." minHeight="60vh" editorRef={editorRef} />
+          </div>
+        )
       ) : (
         <div className="flex-1 overflow-y-auto p-6">
           <div
@@ -183,6 +232,15 @@ export function DocumentViewer({ content, fileName, loading, knowledgeBaseId, do
             </Markdown>
           </div>
         </div>
+      )}
+      {/* 文档切片弹窗：展示该文档所有 chunk（Dialog 走 portal，放容器内即可） */}
+      {canEdit && (
+        <ChunksDialog
+          open={chunksOpen}
+          onOpenChange={setChunksOpen}
+          documentId={documentId!}
+          fileName={fileName}
+        />
       )}
     </div>
   );

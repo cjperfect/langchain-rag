@@ -1,14 +1,15 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, ParseIntPipe, UseInterceptors, UploadedFile } from "@nestjs/common";
-import { FileInterceptor } from "@nestjs/platform-express";
+import { Controller, Get, Post, Patch, Delete, Param, Body, ParseIntPipe } from "@nestjs/common";
 import { KnowledgeService } from "./knowledge.service";
-import type { CreateKnowledgeBaseDto, UpdateKnowledgeBaseDto, CreateDocumentDto, UpdateDocumentDto } from "./dto/knowledge.dto";
+import type { CreateKnowledgeBaseDto, UpdateKnowledgeBaseDto } from "./dto/knowledge.dto";
 // TODO: 临时跳过登录校验
 // import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
 
-/** 单文件上传上限，与前端「单个文件最大 50MB」提示对齐 */
-const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
-
+/**
+ * 知识库路由 — 只负责「容器」CRUD + 文档列表聚合查询
+ *
+ * 文档的创建/上传/更新/删除/内容/切片已拆到 /api/documents（见 document/document.controller.ts）。
+ */
 @Controller("api/knowledge")
 // TODO: 临时跳过登录校验
 // @UseGuards(JwtAuthGuard)
@@ -45,47 +46,11 @@ export class KnowledgeController {
   }
 
   // ==========================================================================
-  // 文档
+  // 文档列表（容器聚合查询）
   // ==========================================================================
 
   @Get(":id/documents")
   async getDocuments(@Param("id", ParseIntPipe) id: number, @CurrentUser() user: { id: number }) {
     return this.knowledgeService.getDocuments(id, user.id);
-  }
-
-  @Post(":id/documents")
-  async createDocument(@Param("id", ParseIntPipe) id: number, @CurrentUser() user: { id: number }, @Body() dto: CreateDocumentDto) {
-    return this.knowledgeService.createDocument(id, user.id, dto);
-  }
-
-  @Post(":id/upload")
-  // 限制与前端提示保持一致（50MB）：超限时直接返回 413，而不是把文件读到内存里再失败
-  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: MAX_UPLOAD_SIZE } }))
-  async uploadDocument(@Param("id", ParseIntPipe) id: number, @CurrentUser() user: { id: number }, @UploadedFile() file: { buffer: Buffer; originalname: string; size: number }) {
-    return this.knowledgeService.uploadDocument(id, user.id, {
-      fileName: file.originalname,
-      buffer: file.buffer,
-      size: file.size,
-    });
-  }
-
-  @Get(":id/documents/:docId/content")
-  async getDocumentContent(@Param("id", ParseIntPipe) _id: number, @Param("docId", ParseIntPipe) docId: number) {
-    return this.knowledgeService.getDocumentContent(docId);
-  }
-
-  @Get(":id/documents/:docId/chunks")
-  async getDocumentChunks(@Param("id", ParseIntPipe) _id: number, @Param("docId", ParseIntPipe) docId: number) {
-    return this.knowledgeService.getDocumentChunks(docId);
-  }
-
-  @Patch(":id/documents/:docId")
-  async updateDocument(@Param("id", ParseIntPipe) _id: number, @Param("docId", ParseIntPipe) docId: number, @CurrentUser() user: { id: number }, @Body() dto: UpdateDocumentDto) {
-    return this.knowledgeService.updateDocument(docId, user.id, dto);
-  }
-
-  @Delete(":id/documents/:docId")
-  async deleteDocument(@Param("id", ParseIntPipe) _id: number, @Param("docId", ParseIntPipe) docId: number, @CurrentUser() user: { id: number }) {
-    return this.knowledgeService.deleteDocument(docId, user.id);
   }
 }

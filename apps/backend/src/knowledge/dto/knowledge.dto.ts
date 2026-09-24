@@ -13,6 +13,8 @@ export interface UpdateKnowledgeBaseDto {
 }
 
 export interface CreateDocumentDto {
+  /** 所属知识库 ID（文档是独立资源，需显式指定归属） */
+  knowledgeBaseId: number;
   /** 文件名 */
   fileName: string;
   /** Markdown 内容 */

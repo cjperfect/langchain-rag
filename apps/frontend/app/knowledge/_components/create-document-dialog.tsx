@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RichTextEditor, htmlToMd } from "@/components/rich-text-editor";
+import { TaskProgressPanel } from "./task-progress";
 
 // ---------------------------------------------------------------------------
 // localStorage key
@@ -65,6 +66,11 @@ export function CreateDocumentDialog({ open, onOpenChange, onSubmit }: CreateDoc
   const [fullscreen, setFullscreen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  // 提交后的解析/切片/向量化进度（SSE 事件驱动）
+  const [progressActive, setProgressActive] = useState(false);
+  const [fallbackDone, setFallbackDone] = useState(false);
+  const [fallbackError, setFallbackError] = useState<string | null>(null);
+  const [resetKey, setResetKey] = useState(0);
   const editorRef = useRef<ReturnType<typeof import("@tiptap/react").useEditor>>(null);
 
   // 打开弹窗时恢复草稿
@@ -119,13 +125,22 @@ export function CreateDocumentDialog({ open, onOpenChange, onSubmit }: CreateDoc
 
     setLoading(true);
     setError("");
+    setResetKey((k) => k + 1);
+    setProgressActive(true);
+    setFallbackDone(false);
+    setFallbackError(null);
     try {
       await onSubmit({ fileName: trimmedName, content: md.trim() });
-      reset();
-      onOpenChange(false);
-    } catch {
-      setError("保存失败，请重试");
-    } finally {
+      // HTTP 成功即任务成功：SSE 无事件时用它兜底点亮完成；留一点时间让事件渲染
+      setFallbackDone(true);
+      setTimeout(() => {
+        reset();
+        onOpenChange(false);
+      }, 600);
+    } catch (e) {
+      // SSE 的 task.failed 带具体原因，已收到就保留；否则用 HTTP 层原因兜底
+      setFallbackError(e instanceof Error ? e.message : "保存失败，请重试");
+      setProgressActive(false);
       setLoading(false);
     }
   };
@@ -160,37 +175,64 @@ export function CreateDocumentDialog({ open, onOpenChange, onSubmit }: CreateDoc
         </DialogHeader>
 
         <div className="flex-1 space-y-4 overflow-y-auto py-2">
-          <div className="space-y-2">
-            <Label htmlFor="doc-name">文件名</Label>
-            <Input
-              id="doc-name"
-              placeholder="例如：产品需求文档.md"
-              value={fileName}
-              onChange={(e) => {
-                setFileName(e.target.value);
-                if (error) setError("");
+          {progressActive ? (
+            /* 提交中：展示分步进度（解析 → 切片 → 向量化 → 完成），SSE 事件驱动 */
+            <TaskProgressPanel
+              enabled={open}
+              active={progressActive}
+              labels={["解析", "切片", "向量化", "完成"]}
+              fallbackDone={fallbackDone}
+              fallbackError={fallbackError}
+              resetKey={resetKey}
+              onCompleted={() => {
+                reset();
+                onOpenChange(false);
               }}
-              disabled={loading}
-              maxLength={200}
             />
-          </div>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="doc-name">文件名</Label>
+                <Input
+                  id="doc-name"
+                  placeholder="例如：产品需求文档.md"
+                  value={fileName}
+                  onChange={(e) => {
+                    setFileName(e.target.value);
+                    if (error) setError("");
+                  }}
+                  disabled={loading}
+                  maxLength={200}
+                />
+              </div>
 
-          <div className="flex-1 flex flex-col min-w-0 space-y-1">
-            <Label>内容</Label>
-            <RichTextEditor initialContent={content} placeholder="使用 Markdown 语法或工具栏编写文档内容..." minHeight="200px" onContentChange={setContent} editorRef={editorRef} />
-          </div>
+              <div className="flex-1 flex flex-col min-w-0 space-y-1">
+                <Label>内容</Label>
+                <RichTextEditor initialContent={content} placeholder="使用 Markdown 语法或工具栏编写文档内容..." minHeight="200px" onContentChange={setContent} editorRef={editorRef} />
+              </div>
 
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+              {error ? <p className="text-sm text-destructive">{error}</p> : null}
+            </>
+          )}
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0 shrink-0">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
-            取消
-          </Button>
-          <Button onClick={handleSubmit} disabled={loading} className="gap-2 ml-2">
-            {loading ? <Loader2 className="size-4 animate-spin" /> : null}
-            创建
-          </Button>
+          {progressActive ? (
+            <Button disabled className="gap-2">
+              <Loader2 className="size-4 animate-spin" />
+              处理中…
+            </Button>
+          ) : (
+            <>
+              <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+                取消
+              </Button>
+              <Button onClick={handleSubmit} disabled={loading} className="gap-2 ml-2">
+                {loading ? <Loader2 className="size-4 animate-spin" /> : null}
+                创建
+              </Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

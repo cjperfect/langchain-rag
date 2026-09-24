@@ -66,20 +66,48 @@ export class RagService {
    * @param documentId 文档 ID
    * @param content 文档全文
    * @param names 知识库名称 / 文档文件名（存入 vector metadata，检索时直接返回）
+   * @param taskId 可选：外层任务已存在时复用其 taskId（跳过 started/completed 生命周期，
+   *               只发 progress），避免「上传」外层任务与「索引」内层任务嵌套成两个 taskId、
+   *               前端按第一个锚定后丢掉内层事件
+   * @param stepOffset 步骤起始编号（外层任务已用掉 step1/2 时从 3 开始）
    * @returns 切片列表（含序号和 token 估算）
    */
-  async indexDocument(kbId: number, documentId: number, content: string, names?: { kbName?: string; documentName?: string }): Promise<ChunkData[]> {
-    return withTaskEvents(TaskType.DOCUMENT_INDEX, { kbId, documentId, message: `索引文档 #${documentId}` }, (taskId) => this.vectorize(kbId, documentId, content, names, taskId));
+  async indexDocument(
+    kbId: number,
+    documentId: number,
+    content: string,
+    names?: { kbName?: string; documentName?: string },
+    taskId?: string,
+    stepOffset = 1,
+  ): Promise<ChunkData[]> {
+    if (taskId) {
+      return this.vectorize(kbId, documentId, content, names, taskId, stepOffset);
+    }
+    return withTaskEvents(TaskType.DOCUMENT_INDEX, { kbId, documentId, message: `索引文档 #${documentId}` }, (tid) =>
+      this.vectorize(kbId, documentId, content, names, tid, stepOffset),
+    );
   }
 
   /**
    * 重建索引：删除旧向量 → 重新切片 → 重新向量化
    */
-  async reindexDocument(documentId: number, kbId: number, content: string, names?: { kbName?: string; documentName?: string }): Promise<ChunkData[]> {
-    return withTaskEvents(TaskType.DOCUMENT_INDEX, { kbId, documentId, message: `重建索引文档 #${documentId}` }, async (taskId) => {
+  async reindexDocument(
+    documentId: number,
+    kbId: number,
+    content: string,
+    names?: { kbName?: string; documentName?: string },
+    taskId?: string,
+    stepOffset = 1,
+  ): Promise<ChunkData[]> {
+    if (taskId) {
       await this.deleteByDocumentId(documentId);
-      emit(TaskEvent.PROGRESS, { taskId, taskType: TaskType.DOCUMENT_INDEX, step: 1, message: "已删除旧向量" });
-      return this.vectorize(kbId, documentId, content, names, taskId, 2);
+      emit(TaskEvent.PROGRESS, { taskId, taskType: TaskType.DOCUMENT_INDEX, step: stepOffset, message: "已删除旧向量" });
+      return this.vectorize(kbId, documentId, content, names, taskId, stepOffset + 1);
+    }
+    return withTaskEvents(TaskType.DOCUMENT_INDEX, { kbId, documentId, message: `重建索引文档 #${documentId}` }, async (tid) => {
+      await this.deleteByDocumentId(documentId);
+      emit(TaskEvent.PROGRESS, { taskId: tid, taskType: TaskType.DOCUMENT_INDEX, step: 1, message: "已删除旧向量" });
+      return this.vectorize(kbId, documentId, content, names, tid, 2);
     });
   }
 

@@ -132,7 +132,7 @@ export function KnowledgePage() {
     (async () => {
       setState({ docContentLoading: true });
       try {
-        const { content } = await getDocumentContent(selectedKb.id, docId);
+        const { content } = await getDocumentContent(docId);
         setState({ docContent: content });
       } finally {
         setState({ docContentLoading: false });
@@ -262,7 +262,7 @@ export function KnowledgePage() {
                       documentId={selectedDoc.id}
                       onSaved={() => {
                         // 重新加载文档内容
-                        getDocumentContent(selectedKb.id, selectedDoc.id).then(({ content }) => setState({ docContent: content }));
+                        getDocumentContent(selectedDoc.id).then(({ content }) => setState({ docContent: content }));
                       }}
                     />
                   </div>
@@ -297,7 +297,7 @@ export function KnowledgePage() {
                       selectedId={null}
                       onSelect={(doc) => setState({ selectedDoc: doc })}
                       onDelete={async (doc) => {
-                        await deleteDocument(selectedKb!.id, doc.id);
+                        await deleteDocument(doc.id);
                         const docs = await getDocuments(selectedKb!.id);
                         setState({ documents: docs });
                       }}

@@ -59,8 +59,10 @@ export class AiEngine {
 
   /** 获取 agent（需要切换模型时创建新实例） */
   private getAgent(modelName?: string) {
-    // 没有传模型名称或者本身就是默认模型，就直接返回，不需要重新创建
-    if (!modelName || modelName === defaultModel.model) return AiEngine.agent;
+    // 没有传模型名称或者本身就是默认模型，就直接返回，不需要重新创建。
+    // ChatOpenAI / ChatOllama 都带 model 字段，基类类型没有，这里做局部断言。
+    const currentModel = (defaultModel as { model?: string }).model;
+    if (!modelName || modelName === currentModel) return AiEngine.agent;
     return createAgent({
       model: createModel(modelName),
       tools: [knowledgeSearchTool],

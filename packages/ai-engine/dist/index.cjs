@@ -1,7 +1,9 @@
 "use strict";
+var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
   for (var name in all)
@@ -15,6 +17,14 @@ var __copyProps = (to, from, except, desc) => {
   }
   return to;
 };
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // src/index.ts
@@ -27,10 +37,7 @@ __export(index_exports, {
   createEmbeddings: () => createEmbeddings,
   defaultEmbeddings: () => defaultEmbeddings,
   lexicalIndex: () => lexicalIndex,
-  loadCsv: () => loadCsv,
-  loadMarkdown: () => loadMarkdown,
-  loadPdf: () => loadPdf,
-  loadText: () => loadText,
+  parseDocument: () => parseDocument,
   ragService: () => ragService,
   splitTextToChunks: () => splitTextToChunks,
   tokenizeForIndex: () => tokenizeForIndex,
@@ -44,6 +51,7 @@ var import_messages2 = require("@langchain/core/messages");
 var import_langchain2 = require("langchain");
 
 // src/agent/model.ts
+var import_ollama = require("@langchain/ollama");
 var import_constants = require("@langchain-rag/shared/constants");
 var import_openai = require("@langchain/openai");
 var baseConfig = {
@@ -53,7 +61,19 @@ var baseConfig = {
   timeout: 6e4,
   configuration: { baseURL: process.env.LLM_BASE_URL }
 };
+var OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "qwen3.5:0.8b";
 function createModel(modelName) {
+  if (process.env.LLM_PROVIDER === "ollama") {
+    const model = modelName && modelName !== import_constants.DEFAULT_MODEL ? modelName : OLLAMA_MODEL;
+    return new import_ollama.ChatOllama({
+      baseUrl: process.env.LLM_BASE_URL ?? "http://localhost:11434",
+      model,
+      think: false,
+      temperature: 0.7,
+      maxTokens: 1024,
+      timeout: 6e4
+    });
+  }
   return new import_openai.ChatOpenAI({
     ...baseConfig,
     model: modelName || import_constants.DEFAULT_MODEL
@@ -95,7 +115,7 @@ var import_documents = require("@langchain/core/documents");
 var import_textsplitters = require("@langchain/textsplitters");
 
 // src/embeddings/embedding.service.ts
-var import_ollama = require("@langchain/ollama");
+var import_ollama2 = require("@langchain/ollama");
 var EMBEDDING_BASE_URL = process.env.EMBEDDING_BASE_URL ?? "http://localhost:11434";
 var EMBEDDING_MODEL = process.env.EMBEDDING_MODEL ?? "qwen3-embedding:0.6b";
 var baseEmbeddingConfig = {
@@ -105,7 +125,7 @@ var baseEmbeddingConfig = {
   stripNewLines: false
 };
 function createEmbeddings(modelName) {
-  return new import_ollama.OllamaEmbeddings({
+  return new import_ollama2.OllamaEmbeddings({
     ...baseEmbeddingConfig,
     model: modelName ?? EMBEDDING_MODEL
   });
@@ -395,19 +415,35 @@ var RagService = class {
    * @param documentId 文档 ID
    * @param content 文档全文
    * @param names 知识库名称 / 文档文件名（存入 vector metadata，检索时直接返回）
+   * @param taskId 可选：外层任务已存在时复用其 taskId（跳过 started/completed 生命周期，
+   *               只发 progress），避免「上传」外层任务与「索引」内层任务嵌套成两个 taskId、
+   *               前端按第一个锚定后丢掉内层事件
+   * @param stepOffset 步骤起始编号（外层任务已用掉 step1/2 时从 3 开始）
    * @returns 切片列表（含序号和 token 估算）
    */
-  async indexDocument(kbId, documentId, content, names) {
-    return (0, import_events.withTaskEvents)(import_events.TaskType.DOCUMENT_INDEX, { kbId, documentId, message: `\u7D22\u5F15\u6587\u6863 #${documentId}` }, (taskId) => this.vectorize(kbId, documentId, content, names, taskId));
+  async indexDocument(kbId, documentId, content, names, taskId, stepOffset = 1) {
+    if (taskId) {
+      return this.vectorize(kbId, documentId, content, names, taskId, stepOffset);
+    }
+    return (0, import_events.withTaskEvents)(
+      import_events.TaskType.DOCUMENT_INDEX,
+      { kbId, documentId, message: `\u7D22\u5F15\u6587\u6863 #${documentId}` },
+      (tid) => this.vectorize(kbId, documentId, content, names, tid, stepOffset)
+    );
   }
   /**
    * 重建索引：删除旧向量 → 重新切片 → 重新向量化
    */
-  async reindexDocument(documentId, kbId, content, names) {
-    return (0, import_events.withTaskEvents)(import_events.TaskType.DOCUMENT_INDEX, { kbId, documentId, message: `\u91CD\u5EFA\u7D22\u5F15\u6587\u6863 #${documentId}` }, async (taskId) => {
+  async reindexDocument(documentId, kbId, content, names, taskId, stepOffset = 1) {
+    if (taskId) {
       await this.deleteByDocumentId(documentId);
-      (0, import_events.emit)(import_events.TaskEvent.PROGRESS, { taskId, taskType: import_events.TaskType.DOCUMENT_INDEX, step: 1, message: "\u5DF2\u5220\u9664\u65E7\u5411\u91CF" });
-      return this.vectorize(kbId, documentId, content, names, taskId, 2);
+      (0, import_events.emit)(import_events.TaskEvent.PROGRESS, { taskId, taskType: import_events.TaskType.DOCUMENT_INDEX, step: stepOffset, message: "\u5DF2\u5220\u9664\u65E7\u5411\u91CF" });
+      return this.vectorize(kbId, documentId, content, names, taskId, stepOffset + 1);
+    }
+    return (0, import_events.withTaskEvents)(import_events.TaskType.DOCUMENT_INDEX, { kbId, documentId, message: `\u91CD\u5EFA\u7D22\u5F15\u6587\u6863 #${documentId}` }, async (tid) => {
+      await this.deleteByDocumentId(documentId);
+      (0, import_events.emit)(import_events.TaskEvent.PROGRESS, { taskId: tid, taskType: import_events.TaskType.DOCUMENT_INDEX, step: 1, message: "\u5DF2\u5220\u9664\u65E7\u5411\u91CF" });
+      return this.vectorize(kbId, documentId, content, names, tid, 2);
     });
   }
   /**
@@ -649,7 +685,8 @@ var AiEngine = class _AiEngine {
   });
   /** 获取 agent（需要切换模型时创建新实例） */
   getAgent(modelName) {
-    if (!modelName || modelName === defaultModel.model) return _AiEngine.agent;
+    const currentModel = defaultModel.model;
+    if (!modelName || modelName === currentModel) return _AiEngine.agent;
     return (0, import_langchain2.createAgent)({
       model: createModel(modelName),
       tools: [knowledgeSearchTool],
@@ -757,28 +794,306 @@ var AiEngine = class _AiEngine {
   }
 };
 
-// src/loaders/csv.loader.ts
-var import_csv = require("@langchain/community/document_loaders/fs/csv");
-async function loadCsv(filePath, options) {
-  const loader = new import_csv.CSVLoader(filePath, options);
-  return loader.load();
-}
-
-// src/loaders/pdf.loader.ts
-var import_pdf = require("@langchain/community/document_loaders/fs/pdf");
-async function loadPdf(filePath, options) {
-  const loader = new import_pdf.PDFLoader(filePath, {
-    splitPages: options?.splitPages,
-    parsedItemSeparator: options?.parsedItemSeparator
-  });
-  return loader.load();
-}
-
-// src/loaders/text.loader.ts
+// src/loaders/pdf/loader.ts
 var import_fs = require("fs");
+var import_pdf_parse = require("pdf-parse");
+
+// src/loaders/pdf/baidu.ts
+var BAIDU_TOKEN_URL = "https://aip.baidubce.com/oauth/2.0/token";
+var DOC_ANALYSIS_URL = "https://aip.baidubce.com/rest/2.0/ocr/v1/doc_analysis_office";
+var PDF_DIRECT_LIMIT_BYTES = 2.5 * 1024 * 1024;
+var TOKEN_TTL_MS = 29 * 24 * 60 * 60 * 1e3;
+var cachedToken = null;
+function getBaiduKeys() {
+  const apiKey = process.env.BAIDU_OCR_API_KEY?.trim() ?? "";
+  const secretKey = process.env.BAIDU_OCR_SECRET_KEY?.trim() ?? "";
+  if (!apiKey || !secretKey) {
+    throw new Error(
+      "\u7F3A\u5C11\u767E\u5EA6 OCR \u914D\u7F6E\uFF1A\u8BF7\u8BBE\u7F6E\u73AF\u5883\u53D8\u91CF BAIDU_OCR_API_KEY \u4E0E BAIDU_OCR_SECRET_KEY\uFF08apps/backend/.env\uFF09"
+    );
+  }
+  return { apiKey, secretKey };
+}
+async function getAccessToken() {
+  if (cachedToken && cachedToken.expiresAt > Date.now()) return cachedToken.token;
+  const { apiKey, secretKey } = getBaiduKeys();
+  const params = new URLSearchParams({
+    grant_type: "client_credentials",
+    client_id: apiKey,
+    client_secret: secretKey
+  });
+  const res = await fetch(`${BAIDU_TOKEN_URL}?${params.toString()}`, {
+    method: "POST",
+    signal: AbortSignal.timeout(3e4)
+  });
+  if (!res.ok) throw new Error(`\u83B7\u53D6\u767E\u5EA6 access_token \u5931\u8D25\uFF1AHTTP ${res.status}`);
+  const data = await res.json();
+  if (!data.access_token) {
+    throw new Error(
+      `\u83B7\u53D6\u767E\u5EA6 access_token \u5931\u8D25\uFF1A${data.error ?? "unknown"} ${data.error_description ?? ""}`.trim()
+    );
+  }
+  cachedToken = { token: data.access_token, expiresAt: Date.now() + TOKEN_TTL_MS };
+  return data.access_token;
+}
+async function ocrPdfPage(pdfBuffer, pageNum) {
+  const token = await getAccessToken();
+  const form = new URLSearchParams();
+  form.set("access_token", token);
+  form.set("pdf_file", pdfBuffer.toString("base64"));
+  if (pageNum !== void 0) form.set("pdf_file_num", String(pageNum));
+  form.set("language_type", "CHN_ENG");
+  form.set("layout_analysis", "true");
+  const res = await fetch(DOC_ANALYSIS_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: form.toString(),
+    signal: AbortSignal.timeout(12e4)
+  });
+  if (!res.ok) throw new Error(`\u767E\u5EA6 OCR \u8BF7\u6C42\u5931\u8D25\uFF1AHTTP ${res.status}`);
+  const data = await res.json();
+  if (data.error_code) {
+    throw new Error(`\u767E\u5EA6 OCR \u8FD4\u56DE\u9519\u8BEF ${data.error_code}\uFF1A${data.error_msg ?? ""}`);
+  }
+  return data;
+}
+function formatTable(idxs, lines) {
+  const cells = [];
+  for (const i of idxs) {
+    const loc = lines[i].words?.words_location;
+    if (!loc) return idxs.map((j) => lines[j].words?.word ?? "").join("\n");
+    cells.push({ top: loc.top, left: loc.left, word: lines[i].words?.word ?? "" });
+  }
+  const rows = [];
+  for (const cell of cells.sort((a, b) => a.top - b.top || a.left - b.left)) {
+    const target = rows.find((row) => Math.abs(row[0].top - cell.top) <= 10);
+    if (target) target.push(cell);
+    else rows.push([cell]);
+  }
+  return rows.map((row) => row.sort((a, b) => a.left - b.left).map((c) => c.word).join(" | ")).join("\n");
+}
+function pageToText(res) {
+  const lines = res.results ?? [];
+  const excluded = /* @__PURE__ */ new Set();
+  for (const section of res.sections ?? []) {
+    const attr = section.attribute;
+    if (attr === "header" || attr === "footer" || attr === "number" || attr === "footnote") {
+      for (const idx of section.sec_idx?.idx ?? []) excluded.add(idx);
+    }
+  }
+  const layouts = res.layouts ?? [];
+  if (layouts.length === 0) {
+    return lines.map((line, i) => excluded.has(i) ? "" : line.words?.word ?? "").filter((t) => t.length > 0).join("\n");
+  }
+  const parts = [];
+  for (const layout of layouts) {
+    const type = layout.layout ?? "text";
+    const idxs = (layout.layout_idx ?? []).filter(
+      (i) => !excluded.has(i) && Boolean(lines[i]?.words?.word)
+    );
+    if (idxs.length === 0) continue;
+    if (type === "table") {
+      parts.push(`[\u8868\u683C]
+${formatTable(idxs, lines)}`);
+      continue;
+    }
+    if (type === "figure") continue;
+    const text = idxs.map((i) => lines[i].words?.word ?? "").join("\n");
+    if (type === "doc_title" || type === "title") parts.push(`## ${text}`);
+    else parts.push(text);
+  }
+  return parts.join("\n");
+}
+
+// src/loaders/pdf/unstructured.ts
+var UNSTRUCTURED_TIMEOUT_MS = 12e4;
+var UNSTRUCTURED_POLL_INTERVAL_MS = 2e3;
+async function parsePdfWithUnstructured(pdfBuffer, _options = {}) {
+  const apiKey = process.env.UNSTRUCTURED_API_KEY;
+  if (!apiKey) {
+    throw new Error("\u7F3A\u5C11 Unstructured \u4E91 API \u914D\u7F6E\uFF1A\u8BF7\u8BBE\u7F6E\u73AF\u5883\u53D8\u91CF UNSTRUCTURED_API_KEY\uFF08apps/backend/.env\uFF09");
+  }
+  const { TransformClient, isAccepted } = await import("unstructured-transform-client");
+  const client = new TransformClient({ apiKey });
+  const outcome = await client.parse.run({
+    input: { data: pdfBuffer, filename: "document.pdf" },
+    output: "elements",
+    include: ["table_html"],
+    waitSeconds: 0
+    // 不阻塞，拿 job handle 后自行轮询，便于统一超时控制
+  });
+  let elements = [];
+  if (isAccepted(outcome)) {
+    const jobId = outcome.body.id;
+    const deadline = Date.now() + UNSTRUCTURED_TIMEOUT_MS;
+    let job = await client.jobs.get(jobId, { output: "elements", include: ["table_html"] });
+    while (job.status === "queued" || job.status === "processing") {
+      if (Date.now() >= deadline) {
+        throw new Error(`Unstructured \u89E3\u6790\u8D85\u65F6\uFF1Ajob ${jobId} \u5728 ${UNSTRUCTURED_TIMEOUT_MS / 1e3}s \u5185\u672A\u5B8C\u6210\uFF08\u72B6\u6001 ${job.status}\uFF09`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, UNSTRUCTURED_POLL_INTERVAL_MS));
+      job = await client.jobs.get(jobId, { output: "elements", include: ["table_html"] });
+    }
+    if (job.status !== "completed" || !job.result) {
+      throw new Error(`Unstructured \u89E3\u6790\u5931\u8D25\uFF1Ajob ${jobId} \u6700\u7EC8\u72B6\u6001 ${job.status}`);
+    }
+    elements = job.result.elements ?? [];
+  } else {
+    elements = outcome.body.elements ?? [];
+  }
+  return elements.map(toUnstructuredElement);
+}
+function toUnstructuredElement(el) {
+  return {
+    element_id: el.elementId,
+    type: el.type,
+    text: el.text ?? "",
+    metadata: {
+      page_number: el.metadata.pageNumber ?? 1,
+      text_as_html: el.metadata.textAsHtml ?? void 0
+    }
+  };
+}
+function htmlTableToText(html) {
+  return html.replace(/<table[^>]*>/gi, "").replace(/<tr[^>]*>/gi, "\n").replace(/<\/tr>/gi, "").replace(/<t[dh][^>]*>/gi, " | ").replace(/<\/t[dh]>/gi, "").replace(/<[^>]+>/g, "").replace(/\n\s*\|\s*/g, "\n").replace(/^\| /gm, "").trim();
+}
+function elementsToPageTexts(elements, totalPages) {
+  const pages = Array.from({ length: totalPages }, () => []);
+  for (const el of elements) {
+    const type = el.type ?? "UncategorizedText";
+    const text = (el.text ?? "").trim();
+    if (!text) continue;
+    if (type === "Header" || type === "Footer" || type === "PageBreak") continue;
+    const page = el.metadata?.page_number ?? 1;
+    const target = pages[page - 1] ?? pages[0];
+    switch (type) {
+      case "Title":
+        target.push(`## ${text}`);
+        break;
+      case "Table":
+        target.push(`[\u8868\u683C]
+${el.metadata?.text_as_html ? htmlTableToText(el.metadata.text_as_html) : text}`);
+        break;
+      case "ListItem":
+        target.push(`- ${text}`);
+        break;
+      default:
+        target.push(text);
+    }
+  }
+  return pages.map((lines) => lines.join("\n"));
+}
+
+// src/loaders/pdf/loader.ts
+function throwOversizeError(reason) {
+  throw new Error(
+    `PDF \u6587\u4EF6\u8D85\u8FC7 ${PDF_DIRECT_LIMIT_BYTES / 1024 / 1024}MB \u4E14${reason}\uFF0C\u8D85\u51FA\u767E\u5EA6\u6587\u6863\u89E3\u6790 pdf_file \u76F4\u4F20\u4E0A\u9650\uFF08\u7F16\u7801\u540E 4M\uFF09\uFF0C\u8BF7\u538B\u7F29\u6216\u62C6\u5206\u540E\u91CD\u8BD5`
+  );
+}
+var MIN_TEXT_CHARS = 20;
+var MIN_CJK_CHARS = 5;
+function needOcrPage(pageText) {
+  const text = pageText.trim();
+  if (text.length < MIN_TEXT_CHARS) return true;
+  const cjkCount = (text.match(/[\u4e00-\u9fff]/g) ?? []).length;
+  if (cjkCount >= MIN_CJK_CHARS) return false;
+  if ((text.match(/\uFFFD/g) ?? []).length / text.length > 0.1) return true;
+  const usableRatio = (text.match(/[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af\u3000-\u303f\uff00-\uffef\x00-\x7f]/g) ?? []).length / text.length;
+  return usableRatio < 0.7;
+}
+async function extractLocalPageTexts(filePath) {
+  const parser = new import_pdf_parse.PDFParse({ data: new Uint8Array((0, import_fs.readFileSync)(filePath)) });
+  try {
+    const result = await parser.getText();
+    return result.pages.map((p) => p.text.trim());
+  } finally {
+    await parser.destroy();
+  }
+}
+async function applyUnstructuredToTextPages(filePath, buffer, localPages, scanPageNums) {
+  const pageTexts = localPages.slice();
+  const scanPageSet = new Set(scanPageNums);
+  try {
+    const elements = await parsePdfWithUnstructured(buffer, {
+      strategy: "hi_res",
+      languages: ["chi_sim"]
+    });
+    const structured = elementsToPageTexts(elements, localPages.length);
+    structured.forEach((text, i) => {
+      if (!scanPageSet.has(i + 1)) pageTexts[i] = text;
+    });
+  } catch (err) {
+    console.warn(
+      `[loadPdf] Unstructured \u7248\u9762\u5206\u6790\u5931\u8D25\uFF0C\u6587\u672C\u5C42\u9875\u56DE\u9000\u672C\u5730\u63D0\u53D6\uFF1A${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+  return pageTexts;
+}
+async function routeWholeOcr(filePath, buffer, options) {
+  if (buffer.byteLength > PDF_DIRECT_LIMIT_BYTES) {
+    throwOversizeError("\u65E0\u6CD5\u672C\u5730\u89E3\u6790\u6587\u672C");
+  }
+  const first = await ocrPdfPage(buffer);
+  const pages = first.pdf_file_size ?? 1;
+  const pageTexts = [pageToText(first)];
+  for (let page = 2; page <= pages; page++) {
+    pageTexts.push(pageToText(await ocrPdfPage(buffer, page)));
+  }
+  return buildDocument(filePath, pageTexts, { pages, ocrPages: pages, options });
+}
+async function loadPdf(filePath, options) {
+  const buffer = (0, import_fs.readFileSync)(filePath);
+  let localPages = [];
+  try {
+    localPages = await extractLocalPageTexts(filePath);
+  } catch (err) {
+    console.warn(
+      `[loadPdf] \u672C\u5730\u6587\u672C\u5C42\u63A2\u6D4B\u5931\u8D25\uFF0C\u6574\u4EFD\u6587\u6863\u8D70 OCR\uFF1A${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+  if (localPages.length === 0) {
+    return routeWholeOcr(filePath, buffer, options);
+  }
+  const scanPageNums = [];
+  localPages.forEach((text, i) => {
+    if (needOcrPage(text)) scanPageNums.push(i + 1);
+  });
+  const pageTexts = await applyUnstructuredToTextPages(filePath, buffer, localPages, scanPageNums);
+  if (scanPageNums.length === 0) {
+    return buildDocument(filePath, pageTexts, { pages: localPages.length, ocrPages: 0, options });
+  }
+  if (buffer.byteLength > PDF_DIRECT_LIMIT_BYTES) {
+    throwOversizeError("\u5305\u542B\u65E0\u6587\u672C\u5C42\u9875\u9762");
+  }
+  for (const page of scanPageNums) {
+    pageTexts[page - 1] = pageToText(await ocrPdfPage(buffer, page));
+  }
+  return buildDocument(filePath, pageTexts, { pages: localPages.length, ocrPages: scanPageNums.length, options });
+}
+function buildDocument(filePath, pageTexts, info) {
+  const { pages, ocrPages, options } = info;
+  const mode = ocrPages === 0 ? "text-layer" : ocrPages === pages ? "baidu-doc-analysis" : "mixed";
+  const content = pageTexts.map((text, i) => pages > 1 ? `===== \u7B2C ${i + 1} \u9875 =====
+${text}` : text).filter((t) => t.trim().length > 0).join("\n\n");
+  return [
+    {
+      pageContent: content,
+      metadata: {
+        source: filePath,
+        mode,
+        pages,
+        ocrPages,
+        splitPages: options?.splitPages ?? false
+      }
+    }
+  ];
+}
+
+// src/loaders/markdown/loader.ts
+var import_fs2 = require("fs");
 var import_documents2 = require("@langchain/core/documents");
-async function loadText(filePath) {
-  const content = (0, import_fs.readFileSync)(filePath, "utf-8");
+async function loadMarkdown(filePath) {
+  const content = (0, import_fs2.readFileSync)(filePath, "utf-8");
   return [
     new import_documents2.Document({
       pageContent: content,
@@ -786,8 +1101,18 @@ async function loadText(filePath) {
     })
   ];
 }
-async function loadMarkdown(filePath) {
-  return loadText(filePath);
+
+// src/loaders/extract.ts
+async function parseDocument(filePath) {
+  const fileType = filePath.split(".").pop()?.toLowerCase() ?? "";
+  switch (fileType) {
+    case "pdf":
+      return { fileType, docs: await loadPdf(filePath, { splitPages: false }) };
+    case "md":
+      return { fileType, docs: await loadMarkdown(filePath) };
+    default:
+      throw new Error(`\u6682\u4E0D\u652F\u6301\u7684\u6587\u4EF6\u7C7B\u578B\uFF1A.${fileType}\uFF08\u5F53\u524D\u652F\u6301 pdf / md\uFF09`);
+  }
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
@@ -798,10 +1123,7 @@ async function loadMarkdown(filePath) {
   createEmbeddings,
   defaultEmbeddings,
   lexicalIndex,
-  loadCsv,
-  loadMarkdown,
-  loadPdf,
-  loadText,
+  parseDocument,
   ragService,
   splitTextToChunks,
   tokenizeForIndex,

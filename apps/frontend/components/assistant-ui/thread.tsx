@@ -184,13 +184,12 @@ const ComposerAction: FC = () => {
         className="ml-2"
         models={[
           {
-            id: "deepseek-v4-flash",
-            name: "DeepSeek-v4-flash",
-            description: "Fast",
+            id: "qwen3.5:0.8b",
+            name: "Qwen3.5 0.8B（本地）",
+            description: "Ollama",
           },
-          { id: "deepseek-v4-pro", name: "DeepSeek-v4-pro", description: "Thinking" },
         ]}
-        defaultValue="deepseek-v4-flash"
+        defaultValue="qwen3.5:0.8b"
         size="sm"
       />
       <div className="flex items-center gap-1.5 ml-auto">

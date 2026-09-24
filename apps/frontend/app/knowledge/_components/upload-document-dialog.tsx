@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, type DragEvent } from "react";
+import { useState, useRef, Fragment, useMemo, type DragEvent } from "react";
 import { Loader2, Upload, File, X, Check, CircleX, Play, Clock, WifiOff, Radio } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -29,10 +29,16 @@ interface UploadDocumentDialogProps {
 /** 各阶段文案 */
 const COPY: Record<Phase, { title: string; description: string }> = {
   select: { title: "上传文档", description: "支持 PDF、Markdown、Word、TXT、CSV、代码文件等格式，单个文件最大 50MB" },
-  running: { title: "正在处理", description: "文档切片与向量化进行中，请勿关闭窗口" },
-  done: { title: "处理完成", description: "文档已完成切片与向量化，可以开始检索了" },
+  running: { title: "正在处理", description: "文档解析、切片与向量化进行中，请勿关闭窗口" },
+  done: { title: "处理完成", description: "文档已完成解析、切片与向量化，可以开始检索了" },
   failed: { title: "处理失败", description: "文档处理过程中出现异常，请检查后重试" },
 };
+
+/**
+ * 分步流程：与后端 document_index 任务的 progress step 一一对应
+ *   step1 → 解析完成 · step2 → 切片完成 · step3 → 向量化完成 · completed 事件点亮「完成」
+ */
+const STEPS = ["上传解析", "切片", "向量化", "完成"];
 
 /** 时间线图标 */
 function EventIcon({ name }: { name: string }) {
@@ -155,7 +161,26 @@ export function UploadDocumentDialog({ open, onOpenChange, onUpload }: UploadDoc
   };
 
   const completedItem = items.findLast((item) => item.name === TaskEventName.COMPLETED);
-  const chunkCount = Array.isArray(completedItem?.payload.result) ? completedItem.payload.result.length : null;
+
+  /** 已完成的步骤数：progress step=N 表示第 N 步完成（1 解析 / 2 切片 / 3 向量化），completed 事件点亮最后一步 */
+  const completedSteps = useMemo(() => {
+    let n = 0;
+    for (const item of items) {
+      if (item.name === TaskEventName.PROGRESS && typeof item.payload.step === "number") {
+        n = Math.max(n, item.payload.step);
+      }
+    }
+    if (items.some((i) => i.name === TaskEventName.COMPLETED)) return STEPS.length;
+    return n;
+  }, [items]);
+
+  // 兼容两种 completed result：旧实现返回切片数组（.length），上传链路返回文档记录（.chunkCount）
+  const completedResult = completedItem?.payload.result;
+  const chunkCount = Array.isArray(completedResult)
+    ? completedResult.length
+    : completedResult && typeof completedResult === "object" && "chunkCount" in completedResult
+      ? (completedResult as { chunkCount?: number }).chunkCount ?? null
+      : null;
   const durationText =
     completedItem?.payload.durationMs != null ? `${(completedItem.payload.durationMs / 1000).toFixed(1)}s` : null;
 
@@ -241,6 +266,45 @@ export function UploadDocumentDialog({ open, onOpenChange, onUpload }: UploadDoc
                   事件流已连接，进度实时推送
                 </div>
               ) : null}
+
+              {/* 分步流程条：上传解析 → 切片 → 向量化 → 完成（completedSteps 由 progress step 推进） */}
+              <div className="flex items-center py-1">
+                {STEPS.map((label, i) => {
+                  const done = i < completedSteps;
+                  const active = phase === "running" && i === completedSteps;
+                  return (
+                    <Fragment key={label}>
+                      {i > 0 ? <div className={`h-0.5 flex-1 rounded ${i <= completedSteps ? "bg-emerald-500" : "bg-border"}`} /> : null}
+                      <div className="flex w-14 flex-col items-center gap-1">
+                        <span
+                          className={`flex size-6 items-center justify-center rounded-full text-xs ${
+                            done
+                              ? "bg-emerald-500 text-white"
+                              : active
+                                ? "border-2 border-primary text-primary"
+                                : "border-2 border-border text-muted-foreground"
+                          }`}
+                        >
+                          {done ? (
+                            <Check className="size-3.5" />
+                          ) : active ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                          ) : (
+                            i + 1
+                          )}
+                        </span>
+                        <span
+                          className={`whitespace-nowrap text-xs ${
+                            done ? "text-emerald-600" : active ? "font-medium text-foreground" : "text-muted-foreground"
+                          }`}
+                        >
+                          {label}
+                        </span>
+                      </div>
+                    </Fragment>
+                  );
+                })}
+              </div>
 
               <div className="max-h-56 space-y-2 overflow-y-auto rounded-lg border bg-muted/20 p-3">
                 {items.length === 0 ? (

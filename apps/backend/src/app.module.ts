@@ -7,6 +7,7 @@ import { ChatModule } from "./chat/chat.module";
 import { ConversationModule } from "./conversation/conversation.module";
 import { MessageModule } from "./message/message.module";
 import { KnowledgeModule } from "./knowledge/knowledge.module";
+import { DocumentModule } from "./document/document.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { EventsController } from "./task/events.controller";
 import { EventsGateway } from "./task/events.gateway";
@@ -23,6 +24,7 @@ import { TaskListener } from "./task/task.listener";
     MessageModule,
     ChatModule,
     KnowledgeModule,
+    DocumentModule,
   ],
   controllers: [AppController, EventsController],
   // TaskListener 打结构化日志；EventsGateway 把同一批事件多播给 SSE 前端

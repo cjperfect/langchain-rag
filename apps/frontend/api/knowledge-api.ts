@@ -37,30 +37,30 @@ export async function deleteKnowledgeBase(id: number): Promise<void> {
 }
 
 // ============================================================================
-// 文档 CRUD
+// 文档 CRUD（独立资源，路由在 /api/documents；列表仍从知识库聚合查询）
 // ============================================================================
 
 export async function getDocuments(knowledgeBaseId: number): Promise<KnowledgeBaseDocument[]> {
   return get<KnowledgeBaseDocument[]>(`/knowledge/${knowledgeBaseId}/documents`);
 }
 
-export async function getDocumentContent(knowledgeBaseId: number, documentId: number): Promise<{ content: string }> {
-  return get<{ content: string }>(`/knowledge/${knowledgeBaseId}/documents/${documentId}/content`);
+export async function getDocumentContent(documentId: number): Promise<{ content: string }> {
+  return get<{ content: string }>(`/documents/${documentId}/content`);
 }
 
-export async function getDocumentChunks(knowledgeBaseId: number, documentId: number): Promise<DocumentChunk[]> {
-  return get<DocumentChunk[]>(`/knowledge/${knowledgeBaseId}/documents/${documentId}/chunks`);
+export async function getDocumentChunks(documentId: number): Promise<DocumentChunk[]> {
+  return get<DocumentChunk[]>(`/documents/${documentId}/chunks`);
 }
 
 export async function createDocument(kbId: number, input: CreateDocumentInput): Promise<KnowledgeBaseDocument> {
-  return post<KnowledgeBaseDocument>(`/knowledge/${kbId}/documents`, input);
+  return post<KnowledgeBaseDocument>("/documents", { ...input, knowledgeBaseId: kbId });
 }
 
 export async function uploadDocument(kbId: number, file: File): Promise<KnowledgeBaseDocument> {
   const formData = new FormData();
   formData.append("file", file);
 
-  const res = await fetch(`/api/knowledge/${kbId}/upload`, {
+  const res = await fetch(`/api/documents/upload?kbId=${kbId}`, {
     method: "POST",
     body: formData,
   });
@@ -74,10 +74,10 @@ export async function uploadDocument(kbId: number, file: File): Promise<Knowledg
   return json.data;
 }
 
-export async function updateDocument(kbId: number, docId: number, input: { content?: string; fileName?: string }): Promise<KnowledgeBaseDocument> {
-  return patch<KnowledgeBaseDocument>(`/knowledge/${kbId}/documents/${docId}`, input);
+export async function updateDocument(docId: number, input: { content?: string; fileName?: string }): Promise<KnowledgeBaseDocument> {
+  return patch<KnowledgeBaseDocument>(`/documents/${docId}`, input);
 }
 
-export async function deleteDocument(kbId: number, docId: number): Promise<void> {
-  return del<void>(`/knowledge/${kbId}/documents/${docId}`);
+export async function deleteDocument(docId: number): Promise<void> {
+  return del<void>(`/documents/${docId}`);
 }
