@@ -67,6 +67,8 @@ export function TaskProgressPanel({
   const [phase, setPhase] = useState<TaskProgressPhase>("idle");
   const [items, setItems] = useState<TimelineItem[]>([]);
   const [error, setError] = useState("");
+  /** 渐进点亮的「已显示步数」：目标值 completedSteps，每 200ms 追 1 步 */
+  const [displayStep, setDisplayStep] = useState(0);
 
   const phaseRef = useRef<TaskProgressPhase>("idle");
   const taskIdRef = useRef<string | null>(null);
@@ -84,6 +86,7 @@ export function TaskProgressPanel({
     sawEventRef.current = false;
     setItems([]);
     setError("");
+    setDisplayStep(0);
     setPhaseAll("running");
   }, [active, resetKey]);
 
@@ -141,6 +144,15 @@ export function TaskProgressPanel({
     return n;
   }, [items, phase, labels.length]);
 
+  // 渐进点亮：completedSteps 是目标步数，displayStep 每 200ms 追 1 步。
+  // 即使 SSE 事件瞬间到达（新建/编辑链路很快）或 HTTP 兜底直接完成，
+  // UI 也逐步点亮，避免「一下子全完成」的观感；displayStep 永不超前于真实进度。
+  useEffect(() => {
+    if (completedSteps <= displayStep) return;
+    const timer = setTimeout(() => setDisplayStep((s) => s + 1), 200);
+    return () => clearTimeout(timer);
+  }, [completedSteps, displayStep]);
+
   // 兼容两种 completed result：旧实现返回切片数组（.length），现实现返回文档记录（.chunkCount）
   const completedItem = items.findLast((item) => item.name === TaskEventName.COMPLETED);
   const completedResult = completedItem?.payload.result;
@@ -167,12 +179,12 @@ export function TaskProgressPanel({
       {/* 分步流程条：completedSteps 由 progress step 推进 */}
       <div className="flex items-center py-1">
         {labels.map((label, i) => {
-          const done = i < completedSteps;
-          const activeStep = phase === "running" && i === completedSteps;
+          const done = i < displayStep;
+          const activeStep = phase === "running" && i === displayStep;
           return (
             <Fragment key={label}>
               {i > 0 ? (
-                <div className={`h-0.5 flex-1 rounded ${i <= completedSteps ? "bg-emerald-500" : "bg-border"}`} />
+                <div className={`h-0.5 flex-1 rounded ${i <= displayStep ? "bg-emerald-500" : "bg-border"}`} />
               ) : null}
               <div className="flex w-14 flex-col items-center gap-1">
                 <span

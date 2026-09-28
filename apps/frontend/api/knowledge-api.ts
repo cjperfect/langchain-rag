@@ -52,6 +52,8 @@ export async function getDocumentChunks(documentId: number): Promise<DocumentChu
   return get<DocumentChunk[]>(`/documents/${documentId}/chunks`);
 }
 
+
+
 export async function createDocument(kbId: number, input: CreateDocumentInput): Promise<KnowledgeBaseDocument> {
   return post<KnowledgeBaseDocument>("/documents", { ...input, knowledgeBaseId: kbId });
 }
@@ -68,6 +70,36 @@ export async function uploadDocument(kbId: number, file: File): Promise<Knowledg
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: "上传失败" }));
     throw new Error(err.message ?? "上传失败");
+  }
+
+  const json = await res.json();
+  return json.data;
+}
+
+/** 解析结果（只解析不上库时返回） */
+export interface ParseResult {
+  fileName: string;
+  fileType: string;
+  content: string;
+  parseMeta?: { mode?: string; pages?: number; ocrPages?: number };
+}
+
+/**
+ * 只解析不上库：POST /api/documents/parse
+ * 返回解析文本 + 元数据，供前端预览/编辑，用户确认后再调 createDocument 真正入库。
+ */
+export async function parseDocumentApi(kbId: number, file: File): Promise<ParseResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`/api/documents/parse?kbId=${kbId}`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: "解析失败" }));
+    throw new Error(err.message ?? "解析失败");
   }
 
   const json = await res.json();

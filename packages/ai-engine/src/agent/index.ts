@@ -4,7 +4,7 @@ import { createModel, defaultModel } from "./model";
 import { systemPrompt } from "../prompts";
 import { knowledgeSearchTool, type RetrievalScope } from "../tools/knowledge-search";
 import type { ChatOptions } from "@langchain-rag/shared/interfaces";
-import { emit, newTaskId, TaskEvent, TaskType } from "@langchain-rag/shared/events";
+import { emit, newTaskId, TaskEvent, TaskType } from "../events";
 import { toLangChainMessages } from "../libs/messages";
 import { StreamEvent } from "../interfaces/message";
 

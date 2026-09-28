@@ -6,7 +6,8 @@ import { defaultEmbeddings } from "../embeddings";
 import type { ChunkData, ChunkMetadata, RagMatchType, RagSearchMode, RagSearchResult } from "../interfaces/rag";
 import { RAG_TABLE_NAME, RAG_EMBEDDING_DIMENSIONS } from "../constants/rag";
 import { lexicalIndex, type PgPoolLike } from "./bm25";
-import { emit, withTaskEvents, TaskEvent, TaskType } from "@langchain-rag/shared/events";
+import { emit, withTaskEvents, TaskEvent, TaskType } from "../events";
+import { normalizeParsedText } from "../loaders/extract";
 
 export type { ChunkData, RagSearchResult, RagSearchMode, RagMatchType };
 
@@ -89,7 +90,17 @@ export class RagService {
   }
 
   /**
-   * 重建索引：删除旧向量 → 重新切片 → 重新向量化
+   * 重建索引（编辑保存专用）：删除旧向量 → 内容就绪 → 数据清洗 → 重新切片 → 重新向量化
+   *
+   * 事件序列与前端 5 步条（重建索引/数据清洗/切片/向量化/完成）一一对应：
+   *   step(offset)     重建索引：删除旧向量
+   *   step(offset+1)   数据清洗完成（CRLF / BOM 归一）
+   *   step(offset+2)   切片完成（vectorize 发出）
+   *   step(offset+3)   向量化完成（vectorize 发出）
+   *
+   * 编辑内容来自编辑器（非文件），无需「解析」步骤；与新建链路（createDocument）
+   * 保持同一套步骤语义（数据清洗/切片/向量化/完成），仅多出「重建索引」第一步；
+   * 编辑内容同样走 normalizeParsedText 统一清洗，保证进入切片前的格式一致。
    */
   async reindexDocument(
     documentId: number,
@@ -99,15 +110,20 @@ export class RagService {
     taskId?: string,
     stepOffset = 1,
   ): Promise<ChunkData[]> {
+    // 编辑内容统一清洗（幂等；若调用方已清洗则此处无副作用）
+    const cleaned = normalizeParsedText(content, true);
+
     if (taskId) {
       await this.deleteByDocumentId(documentId);
-      emit(TaskEvent.PROGRESS, { taskId, taskType: TaskType.DOCUMENT_INDEX, step: stepOffset, message: "已删除旧向量" });
-      return this.vectorize(kbId, documentId, content, names, taskId, stepOffset + 1);
+      emit(TaskEvent.PROGRESS, { taskId, taskType: TaskType.DOCUMENT_INDEX, step: stepOffset, message: "重建索引：删除旧向量" });
+      emit(TaskEvent.PROGRESS, { taskId, taskType: TaskType.DOCUMENT_INDEX, step: stepOffset + 1, message: "数据清洗完成（CRLF / BOM 归一），开始切片与向量化" });
+      return this.vectorize(kbId, documentId, cleaned, names, taskId, stepOffset + 2);
     }
     return withTaskEvents(TaskType.DOCUMENT_INDEX, { kbId, documentId, message: `重建索引文档 #${documentId}` }, async (tid) => {
       await this.deleteByDocumentId(documentId);
-      emit(TaskEvent.PROGRESS, { taskId: tid, taskType: TaskType.DOCUMENT_INDEX, step: 1, message: "已删除旧向量" });
-      return this.vectorize(kbId, documentId, content, names, tid, 2);
+      emit(TaskEvent.PROGRESS, { taskId: tid, taskType: TaskType.DOCUMENT_INDEX, step: 1, message: "重建索引：删除旧向量" });
+      emit(TaskEvent.PROGRESS, { taskId: tid, taskType: TaskType.DOCUMENT_INDEX, step: 2, message: "数据清洗完成（CRLF / BOM 归一），开始切片与向量化" });
+      return this.vectorize(kbId, documentId, cleaned, names, tid, 3);
     });
   }
 
@@ -125,7 +141,9 @@ export class RagService {
     taskId: string,
     stepOffset = 1,
   ): Promise<ChunkData[]> {
-    const texts = await splitTextToChunks(content);
+    // preserveTables：解析产物里 [表格] 标记的 GFM 表格块整体保留为 1 片，
+    // 不被 RecursiveCharacterTextSplitter 按行切断（否则表格行列结构被打散，检索/展示都失真）
+    const texts = await splitTextToChunks(content, { preserveTables: true });
     if (texts.length === 0) return [];
 
     emit(TaskEvent.PROGRESS, { taskId, taskType: TaskType.DOCUMENT_INDEX, step: stepOffset, message: `切片完成（${texts.length} 片），开始向量化` });
@@ -273,16 +291,90 @@ function fuseRrf(lists: RagSearchResult[][], k: number): RagSearchResult[] {
     }));
 }
 
+/** 切片选项 */
+export interface SplitOptions {
+  /**
+   * 表格豁免：解析产物里 `[表格]` 标记的 GFM 表格块整体保留为 1 片。
+   *
+   * 表格被字符级切分器切断后，行列结构（表头 + 分隔行 + 数据行）会被打散，
+   * 检索时命中碎片、展示时渲染不成表格；整体保留则表格语义完整。
+   * 表格块之间的普通正文仍按 350/40 正常切分。
+   */
+  preserveTables?: boolean;
+}
+
+/** 提取 `[表格]` 标记的 GFM 表格块，与其余普通文本分开 */
+function extractTableBlocks(text: string): { tableBlocks: string[]; textBlocks: string[] } {
+  const lines = text.split("\n");
+  const tableBlocks: string[] = [];
+  const textBlocks: string[] = [];
+  let current: string[] = [];
+  let table: string[] = [];
+  let inTable = false;
+
+  const flushText = () => {
+    if (current.length) {
+      textBlocks.push(current.join("\n"));
+      current = [];
+    }
+  };
+  const flushTable = () => {
+    if (table.length) {
+      tableBlocks.push(table.join("\n"));
+      table = [];
+    }
+  };
+
+  for (const line of lines) {
+    if (inTable) {
+      // 表格块内：只有连续的 `|` 行属于表格；遇到普通行说明表格结束
+      if (/^\|/.test(line)) {
+        table.push(line);
+        continue;
+      }
+      flushTable();
+      inTable = false;
+    }
+    if (/^\[表格\]\s*$/.test(line.trim())) {
+      // 新的表格块开始（保留 [表格] 标记，便于检索时识别）
+      flushText();
+      inTable = true;
+      table = [line];
+      continue;
+    }
+    current.push(line);
+  }
+  if (inTable) flushTable();
+  flushText();
+  return { tableBlocks, textBlocks };
+}
+
 /**
  * 将文本按语义切分为切片
  *
  * 使用 RecursiveCharacterTextSplitter，按段落 → 句子 → 逗号 → 字 优先级递归切分，
- * 每个切片最大 500 字符，相邻切片重叠 50 字符。
+ * 每个切片最大 350 字符，相邻切片重叠 40 字符；
+ * preserveTables 开启时 `[表格]` 块整体保留（见 SplitOptions）。
  */
-export async function splitTextToChunks(text: string): Promise<string[]> {
+export async function splitTextToChunks(text: string, options?: SplitOptions): Promise<string[]> {
+  if (options?.preserveTables) {
+    const { tableBlocks, textBlocks } = extractTableBlocks(text);
+    const chunks: string[] = [...tableBlocks];
+    for (const block of textBlocks) {
+      chunks.push(...(await splitTextInternal(block)));
+    }
+    return chunks.filter(Boolean);
+  }
+  return splitTextInternal(text);
+}
+
+/** 普通文本切分（表格豁免场景下只处理非表格块） */
+async function splitTextInternal(text: string): Promise<string[]> {
   const splitter = new RecursiveCharacterTextSplitter({
-    chunkSize: 500,
-    chunkOverlap: 50,
+    // 中文场景 500 字符 ≈ 250 token 偏大，检索命中粒度粗；
+    // 350 字符 ≈ 175 token，更适合 QA 式问答，切片数略增但向量化成本可接受
+    chunkSize: 350,
+    chunkOverlap: 40,
     separators: ["\n\n", "\n", "。", "！", "？", "；", "，", " ", ""],
   });
 

@@ -2,11 +2,42 @@
 
 import { useEffect, useState } from "react";
 import { FileText, AlertCircle } from "lucide-react";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getDocumentChunks } from "@/api/knowledge-api";
 import type { DocumentChunk } from "@/interfaces/knowledge";
+
+/**
+ * 切片内容用 Markdown 渲染（含 GFM 表格），否则解析产物的
+ * `| 项目 | 参数 |` 表格会以源代码形式展示，看不出表格结构。
+ * 注意：不做 document-viewer 那种「单换行提升为段落」的预处理——
+ * GFM 表格依赖连续行（表头/分隔行/数据行之间是单个 \n），提升了反而破坏表格。
+ */
+const chunkMarkdownComponents = {
+  table({ children }: { children?: React.ReactNode }) {
+    return (
+      <div className="my-1 overflow-x-auto">
+        <table className="w-full border-collapse text-[13px]">{children}</table>
+      </div>
+    );
+  },
+  th({ children }: { children?: React.ReactNode }) {
+    return <th className="border bg-muted/40 px-2 py-1 text-left font-medium">{children}</th>;
+  },
+  td({ children }: { children?: React.ReactNode }) {
+    return <td className="border px-2 py-1 align-top">{children}</td>;
+  },
+  code({ children }: { children?: React.ReactNode }) {
+    return <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[12px]">{children}</code>;
+  },
+  pre({ children }: { children?: React.ReactNode }) {
+    return <>{children}</>;
+  },
+};
 
 /**
  * 文档切片弹窗：展示当前文档的所有切片（序号 / token 数 / 内容）
@@ -80,7 +111,11 @@ export function ChunksDialog({
                     </span>
                     <span className="text-xs text-muted-foreground">≈ {chunk.tokenCount} tokens</span>
                   </div>
-                  <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-foreground/85">{chunk.content}</p>
+                  <div className="prose-chunk text-[13px] leading-relaxed text-foreground/85">
+                    <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={chunkMarkdownComponents}>
+                      {chunk.content}
+                    </Markdown>
+                  </div>
                 </div>
               ))}
             </div>

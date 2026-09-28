@@ -23,7 +23,6 @@ import {
   updateKnowledgeBase,
   deleteKnowledgeBase,
   createDocument,
-  uploadDocument,
   deleteDocument,
 } from "@/api/knowledge-api";
 import type { KnowledgeBase, PageState } from "@/interfaces/knowledge";
@@ -149,10 +148,9 @@ export function KnowledgePage() {
     await fetchKbList();
   };
 
-  // 上传文档
-  const handleUploadDocument = async (file: File) => {
+  // 上传文档入库完成：刷新文档列表与知识库计数（解析预览与确认入库在弹窗内完成）
+  const handleDocCreated = async () => {
     if (!selectedKb) return;
-    await uploadDocument(selectedKb.id, file);
     const docs = await getDocuments(selectedKb.id);
     setState({ documents: docs });
     await fetchKbList();
@@ -357,7 +355,12 @@ export function KnowledgePage() {
       <CreateDocumentDialog open={createDocOpen} onOpenChange={(open) => setState({ createDocOpen: open })} onSubmit={handleCreateDocument} />
 
       {/* 上传文档对话框 */}
-      <UploadDocumentDialog open={uploadDocOpen} onOpenChange={(open) => setState({ uploadDocOpen: open })} onUpload={handleUploadDocument} />
+      <UploadDocumentDialog
+        open={uploadDocOpen}
+        onOpenChange={(open) => setState({ uploadDocOpen: open })}
+        kbId={selectedKb?.id}
+        onCreated={handleDocCreated}
+      />
     </div>
   );
 }

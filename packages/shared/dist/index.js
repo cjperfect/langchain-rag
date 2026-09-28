@@ -38,57 +38,7 @@ var ErrorCode = /* @__PURE__ */ ((ErrorCode2) => {
   ErrorCode2[ErrorCode2["KNOWLEDGE_BASE_NOT_FOUND"] = 60004] = "KNOWLEDGE_BASE_NOT_FOUND";
   return ErrorCode2;
 })(ErrorCode || {});
-
-// src/events/event-bus.ts
-var instance = null;
-function setEventBus(emitter) {
-  instance = emitter;
-}
-function emit(event, ...args) {
-  return instance?.emit(event, ...args) ?? false;
-}
-
-// src/events/task-event.ts
-var TaskType = /* @__PURE__ */ ((TaskType2) => {
-  TaskType2["DOCUMENT_INDEX"] = "document_index";
-  TaskType2["RAG_SEARCH"] = "rag_search";
-  TaskType2["CHAT"] = "chat";
-  return TaskType2;
-})(TaskType || {});
-var TaskEvent = {
-  /** 任务开始 */
-  STARTED: "task.started",
-  /** 任务进度更新 */
-  PROGRESS: "task.progress",
-  /** 任务成功完成 */
-  COMPLETED: "task.completed",
-  /** 任务失败 */
-  FAILED: "task.failed"
-};
-function newTaskId(taskType) {
-  return `${taskType}-${globalThis.crypto.randomUUID()}`;
-}
-async function withTaskEvents(taskType, context, run) {
-  const taskId = newTaskId(taskType);
-  const startedAt = Date.now();
-  emit(TaskEvent.STARTED, { taskId, taskType, ...context });
-  try {
-    const result = await run(taskId);
-    emit(TaskEvent.COMPLETED, { taskId, taskType, durationMs: Date.now() - startedAt, result });
-    return result;
-  } catch (err) {
-    const e = err instanceof Error ? err : new Error(String(err));
-    emit(TaskEvent.FAILED, { taskId, taskType, durationMs: Date.now() - startedAt, error: e.message, stack: e.stack });
-    throw err;
-  }
-}
 export {
   CommonStatus,
-  ErrorCode,
-  TaskEvent,
-  TaskType,
-  emit,
-  newTaskId,
-  setEventBus,
-  withTaskEvents
+  ErrorCode
 };

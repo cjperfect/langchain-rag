@@ -4,7 +4,7 @@ import { EventEmitter2 } from "@nestjs/event-emitter";
 import { AppModule } from "./app.module";
 import { TransformInterceptor } from "./common/interceptors/transform.interceptor";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
-import { setEventBus } from "@langchain-rag/shared/events";
+import { taskBus, TaskEvent } from "@langchain-rag/ai-engine";
 
 // Prisma Pg adapter 返回原生 bigint，JSON.stringify 默认不支持序列化。
 // 添加全局 toJSON 将 BigInt 转为 Number（PRISMA 的 id 在安全范围内）。
@@ -67,9 +67,12 @@ async function bootstrap() {
     credentials: true,
   });
 
-  // 把 NestJS EventEmitterModule 创建的 EventEmitter2 实例注入 shared holder。
-  // 之后 ai-engine 调用 emit(...) 会转发到该实例，与本处 @OnEvent 监听器同源同实例。
-  setEventBus(app.get(EventEmitter2));
+  // 桥接：ai-engine 内建 taskBus → NestJS EventEmitter2（@OnEvent 监听器绑定在它上面）。
+  // ai-engine 的 emit(...) 发到 taskBus，这里转发到 nestBus，同一个注册表，事件不丢。
+  const nestBus = app.get(EventEmitter2);
+  for (const ev of [TaskEvent.STARTED, TaskEvent.PROGRESS, TaskEvent.COMPLETED, TaskEvent.FAILED]) {
+    taskBus.on(ev, (payload) => nestBus.emit(ev, payload));
+  }
 
   console.log("Server is running on port:", process.env.PORT ?? 3001);
   await app.listen(process.env.PORT ?? 3001);

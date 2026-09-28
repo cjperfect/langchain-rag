@@ -43,6 +43,12 @@ model KnowledgeDocument {
 
   chunkCount Int @default(0) @map("chunk_count")
 
+  // 解析元数据（uploadDocument 解析后落库；新建文档/旧文档为空）
+  // mode：text-layer（纯文本层）/ baidu-doc-analysis（纯扫描 OCR）/ mixed（逐页混合路由）
+  parseMode     String? @map("parse_mode") @db.VarChar(30)
+  parsePages    Int?    @map("parse_pages")
+  parseOcrPages Int?    @map("parse_ocr_pages")
+
   status       Int     @default(1) @db.SmallInt
   errorMessage String? @map("error_message") @db.Text
 

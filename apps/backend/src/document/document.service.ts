@@ -1,11 +1,11 @@
-import { Injectable, Logger, InternalServerErrorException } from "@nestjs/common";
+import { Injectable, Logger, InternalServerErrorException, NotFoundException } from "@nestjs/common";
 import { writeFileSync, unlinkSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { PrismaService } from "../prisma/prisma.service";
 import { CommonStatus } from "@langchain-rag/shared";
-import { emit, withTaskEvents, TaskEvent, TaskType } from "@langchain-rag/shared/events";
-import { parseDocument, ragService } from "@langchain-rag/ai-engine";
+import { emit, withTaskEvents, TaskEvent, TaskType } from "@langchain-rag/ai-engine";
+import { parseDocument, ragService, normalizeParsedText } from "@langchain-rag/ai-engine";
 import type { ChunkData } from "@langchain-rag/ai-engine";
 import { KnowledgeService } from "../knowledge/knowledge.service";
 import type { CreateDocumentDto, UpdateDocumentDto } from "../knowledge/dto/knowledge.dto";
@@ -13,9 +13,18 @@ import type { CreateDocumentDto, UpdateDocumentDto } from "../knowledge/dto/know
 /**
  * 根据文件名推断文件类型
  */
+/**
+ * 从文件名推断文件类型（落库用）。
+ *
+ * 新建文档的内容来自 Markdown 编辑器，因此**默认按 .md 处理**：
+ * 文件名无扩展名（如「产品需求文档」）或扩展名不是字母数字（如「v1.2」）时，
+ * 一律视为 Markdown —— 避免旧实现 split(".").pop() 把整个文件名当扩展名
+ * （fileType 存成「产品需求文档」这类脏值）。
+ * 上传文档的 fileType 由解析链路（parseDocument 返回）单独记录，不走这里。
+ */
 function getFileType(fileName: string): string {
-  const ext = fileName.split(".").pop()?.toLowerCase() ?? "txt";
-  return ext;
+  const match = /\.([a-zA-Z0-9]+)$/.exec(fileName);
+  return match ? match[1].toLowerCase() : "md";
 }
 
 /**
@@ -50,7 +59,13 @@ export class DocumentService {
    *               避免嵌套任务导致前端按第一个 started 锚定后丢掉内层事件。
    *               直接新建文档（无 taskId）时行为不变：indexDocument 自带完整任务事件。
    */
-  async createDocument(kbId: number, userId: number, dto: Omit<CreateDocumentDto, "knowledgeBaseId">, taskId?: string) {
+  async createDocument(
+    kbId: number,
+    userId: number,
+    dto: Omit<CreateDocumentDto, "knowledgeBaseId">,
+    taskId?: string,
+    parseMeta?: { mode?: string; pages?: number; ocrPages?: number },
+  ) {
     const kb = await this.knowledge.get(kbId);
 
     const fileType = getFileType(dto.fileName);
@@ -66,6 +81,10 @@ export class DocumentService {
         content: dto.content,
         chunkCount: 0,
         status: CommonStatus.NORMAL,
+        // 上传链路会带上解析元数据（mode/pages/ocrPages），供前端「解析结果」查看与后续质量监控
+        parseMode: parseMeta?.mode,
+        parsePages: parseMeta?.pages,
+        parseOcrPages: parseMeta?.ocrPages,
       },
     });
 
@@ -82,21 +101,15 @@ export class DocumentService {
       TaskType.DOCUMENT_INDEX,
       { kbId, message: `新建文档：${dto.fileName}` },
       async (tid) => {
-        // step1/2 与上传链路语义一致：解析文档内容 → 解析完成
+        // 新建/编辑的内容来自编辑器（非文件），无需「解析」步骤：
+        // step1 数据清洗 → step2 切片 → step3 向量化（vectorize 内发出，stepOffset=2）
         emit(TaskEvent.PROGRESS, {
           taskId: tid,
           taskType: TaskType.DOCUMENT_INDEX,
           step: 1,
-          message: "解析文档内容",
+          message: "数据清洗完成（CRLF / BOM 归一），开始切片与向量化",
         });
-        emit(TaskEvent.PROGRESS, {
-          taskId: tid,
-          taskType: TaskType.DOCUMENT_INDEX,
-          step: 2,
-          message: "解析完成，开始切片与向量化",
-        });
-        // step3 切片 / step4 向量化由 vectorize 内发出（stepOffset=3）
-        return this.indexAndPersist(doc.id, kbId, dto.content, names, tid, 3);
+        return this.indexAndPersist(doc.id, kbId, dto.content, names, tid, 2);
       },
     );
   }
@@ -197,6 +210,24 @@ export class DocumentService {
     return { content: chunks.map((c) => c.content).join("\n\n") };
   }
 
+  /**
+   * 获取文档解析结果：原始解析全文（content 字段，切片前未拼接的 parseDocument 输出）
+   * + 解析元数据（mode / pages / ocrPages，仅 PDF 上传有值）
+   */
+  async getParsedDocument(docId: number) {
+    const doc = await this.prisma.knowledgeDocument.findUnique({ where: { id: docId } });
+    // 抛 NotFoundException 而非普通 Error：普通 Error 会被全局过滤器转成 500，
+    // 前端拿到的是「服务器内部错误」而非可识别的「文档不存在」（编辑已删除的文档时尤其明显）
+    if (!doc) throw new NotFoundException(`文档不存在（id=${docId}）`);
+    return {
+      content: doc.content ?? "",
+      fileType: doc.fileType,
+      parseMode: doc.parseMode,
+      parsePages: doc.parsePages,
+      parseOcrPages: doc.parseOcrPages,
+    };
+  }
+
   /** 获取文档切片列表 */
   async getDocumentChunks(docId: number) {
     return this.prisma.knowledgeChunk.findMany({
@@ -253,10 +284,12 @@ export class DocumentService {
             step: 2,
             message:
               `解析完成（${meta.pages != null ? `共 ${meta.pages} 页` : "内容提取完成"}` +
-              `${meta.mode ? ` · ${meta.mode}` : ""}${meta.ocrPages ? ` · OCR ${meta.ocrPages} 页` : ""}），开始切片与向量化`,
+              `${meta.mode ? ` · ${meta.mode}` : ""}${meta.ocrPages ? ` · OCR ${meta.ocrPages} 页` : ""}），` +
+              `数据清洗完成（CRLF / BOM 归一），开始切片与向量化`,
           });
 
-          // 如果 loader 未提取到任何文本，回退为原始 buffer 内容
+          // 如果 loader 未提取到任何文本，回退为原始 buffer 内容；
+          // parseMeta 仅 PDF 解析有（mode/pages/ocrPages），Markdown 无解析统计则不带
           return this.createDocument(
             kbId,
             userId,
@@ -265,6 +298,7 @@ export class DocumentService {
               content: content.trim() || file.buffer.toString("utf-8"),
             },
             taskId,
+            meta.mode ? { mode: meta.mode, pages: meta.pages, ocrPages: meta.ocrPages } : undefined,
           );
         },
       );
@@ -282,6 +316,76 @@ export class DocumentService {
   }
 
 
+  /**
+   * 只解析不上库：调用 parseDocument 返回解析文本与元数据，供前端预览/编辑。
+   *
+   * 与 uploadDocument 的区别：不做切片/向量化/落库，不创建文档记录。
+   * 用户在前端确认（可先编辑解析文本）后再调 createDocument 真正入库，
+   * 实现「先看解析结果、确认后入库」的交互。
+   *
+   * 事件序列（前端按此渲染解析进度）：
+   *   task.started        → 「解析文档：xxx」
+   *   task.progress step1 → 解析文档内容
+   *   task.progress step2 → 数据清洗完成（独立事件，与 step1 分开推进步骤条）
+   *   task.completed      → 返回 { fileName, fileType, content, parseMeta }（解析统计在 parseMeta）
+   */
+  async parseOnly(kbId: number, file: { fileName: string; buffer: Buffer; size: number }) {
+    await this.knowledge.get(kbId);
+
+    const fileName = file.fileName;
+    const tempPath = join(tmpdir(), `kb-parse-${Date.now()}-${fileName}`);
+
+    try {
+      writeFileSync(tempPath, file.buffer);
+
+      return await withTaskEvents(
+        TaskType.DOCUMENT_INDEX,
+        { kbId, message: `解析文档：${fileName}` },
+        async (taskId) => {
+          emit(TaskEvent.PROGRESS, {
+            taskId,
+            taskType: TaskType.DOCUMENT_INDEX,
+            step: 1,
+            message: "解析文档内容（PDF 逐页路由 / Markdown）",
+          });
+
+          const { fileType, docs } = await parseDocument(tempPath);
+          const content = docs.map((d) => d.pageContent).join("\n\n");
+          const meta = (docs[0]?.metadata ?? {}) as { mode?: string; pages?: number; ocrPages?: number };
+
+          // step2 只发「数据清洗完成」：解析阶段步骤条为 解析/数据清洗/切片/向量化/完成，
+          // step1（解析）与 step2（数据清洗）应是两条独立进度，合并成一条消息会让
+          // 「解析」与「数据清洗」几乎同时点亮（观感：解析和数据清洗只发了一条 SSE）。
+          // 解析统计（共 N 页 · mode · OCR N 页）由返回的 parseMeta 承载，前端元信息区展示。
+          emit(TaskEvent.PROGRESS, {
+            taskId,
+            taskType: TaskType.DOCUMENT_INDEX,
+            step: 2,
+            message: "数据清洗完成（CRLF / BOM 归一）",
+          });
+
+          // 与 uploadDocument 相同的回退：loader 未提取到任何文本时用原始 buffer 内容
+          return {
+            fileName,
+            fileType,
+            content: content.trim() || file.buffer.toString("utf-8"),
+            parseMeta: meta.mode ? { mode: meta.mode, pages: meta.pages, ocrPages: meta.ocrPages } : undefined,
+          };
+        },
+      );
+    } catch (err) {
+      this.logger.error(`文件解析失败: ${fileName}`, err);
+      throw err;
+    } finally {
+      // 清理临时文件
+      try {
+        unlinkSync(tempPath);
+      } catch {
+        /* 忽略清理错误 */
+      }
+    }
+  }
+
   /** 更新文档内容：ai-engine 负责重建索引 */
   async updateDocument(docId: number, userId: number, dto: UpdateDocumentDto) {
     const doc = await this.prisma.knowledgeDocument.findUnique({ where: { id: docId } });
@@ -297,7 +401,9 @@ export class DocumentService {
       const kb = await this.knowledge.get(doc.knowledgeBaseId);
       const fileName = dto.fileName ?? doc.fileName;
       // 闭包内 TS 会丢失 dto.content 的收窄，先取为局部常量
-      const newContent = dto.content;
+      // 编辑内容统一清洗（CRLF→LF + 去 BOM），与解析链路进入切片前的格式保持一致；
+      // reindexDocument 内部会再清洗一次（幂等），此处清洗保证库里也存归一化后的内容
+      const newContent = normalizeParsedText(dto.content ?? "", true);
 
       // 重建索引包成完整任务事件（step1 删除旧向量 → step2 切片 → step3 向量化 → 完成），
       // 让前端「保存编辑」也能看到分步进度。

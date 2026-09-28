@@ -13,7 +13,9 @@ const BASE_URL = "/api";
 
 export const http = axios.create({
   baseURL: BASE_URL,
-  timeout: 30_000,
+  // 解析 PDF 含 Unstructured 云 + 图片语义化，单次接口实测可到 30s+；
+  // 5 分钟兜底覆盖多页/大文件慢解析，避免 axios 先于后端返回超时。
+  timeout: 300_000,
   headers: { "Content-Type": "application/json" },
 });
 

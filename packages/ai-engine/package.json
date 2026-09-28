@@ -21,7 +21,9 @@
     "d3-dsv": "^2.0.0",
     "dotenv": "catalog:",
     "langchain": "^1.5.3",
+    "mupdf": "^1.28.1",
     "pdf-parse": "^2.4.5",
+    "sharp": "^0.35.4",
     "unstructured-transform-client": "^0.18.19",
     "zod": "^4.4.3"
   },

@@ -44,6 +44,12 @@ export interface UnstructuredElement {
     page_number?: number;
     /** Table 类型特有的 HTML 表格结构 */
     text_as_html?: string;
+    /** Figure/Image 元素的版面坐标（points 为 PDF 用户空间 pt，用于裁剪图片语义化） */
+    coordinates?: {
+      layout_width?: number;
+      layout_height?: number;
+      points?: number[][];
+    } | null;
   };
 }
 
@@ -62,6 +68,7 @@ interface TransformElement {
   metadata: {
     pageNumber: number | null;
     textAsHtml: string | null;
+    coordinates: { layout_width?: number; layout_height?: number; points?: number[][] } | null;
   };
 }
 
@@ -84,37 +91,66 @@ export async function parsePdfWithUnstructured(
   const { TransformClient, isAccepted } = await import("unstructured-transform-client");
   const client = new TransformClient({ apiKey });
 
-  const outcome = await client.parse.run({
-    input: { data: pdfBuffer, filename: "document.pdf" },
-    output: "elements",
-    include: ["table_html"],
-    waitSeconds: 0, // 不阻塞，拿 job handle 后自行轮询，便于统一超时控制
-  });
+  /** 单次提交 + 轮询解析 job（提交失败 / job 最终失败 / 轮询超时都会抛错） */
+  const runOnce = async (): Promise<UnstructuredElement[]> => {
+    const outcome = await client.parse.run({
+      input: { data: pdfBuffer, filename: "document.pdf" },
+      output: "elements",
+      include: ["table_html", "coordinates"],
+      waitSeconds: 0, // 不阻塞，拿 job handle 后自行轮询，便于统一超时控制
+    });
 
-  let elements: TransformElement[] = [];
+    let elements: TransformElement[] = [];
 
-  if (isAccepted(outcome)) {
-    const jobId = outcome.body.id;
-    const deadline = Date.now() + UNSTRUCTURED_TIMEOUT_MS;
+    if (isAccepted(outcome)) {
+      const jobId = outcome.body.id;
+      const deadline = Date.now() + UNSTRUCTURED_TIMEOUT_MS;
 
-    let job = await client.jobs.get(jobId, { output: "elements", include: ["table_html"] });
-    while (job.status === "queued" || job.status === "processing") {
-      if (Date.now() >= deadline) {
-        throw new Error(`Unstructured 解析超时：job ${jobId} 在 ${UNSTRUCTURED_TIMEOUT_MS / 1000}s 内未完成（状态 ${job.status}）`);
+      let job = await client.jobs.get(jobId, { output: "elements", include: ["table_html", "coordinates"] });
+      while (job.status === "queued" || job.status === "processing") {
+        if (Date.now() >= deadline) {
+          throw new Error(`Unstructured 解析超时：job ${jobId} 在 ${UNSTRUCTURED_TIMEOUT_MS / 1000}s 内未完成（状态 ${job.status}）`);
+        }
+        await new Promise((resolve) => setTimeout(resolve, UNSTRUCTURED_POLL_INTERVAL_MS));
+        job = await client.jobs.get(jobId, { output: "elements", include: ["table_html"] });
       }
-      await new Promise((resolve) => setTimeout(resolve, UNSTRUCTURED_POLL_INTERVAL_MS));
-      job = await client.jobs.get(jobId, { output: "elements", include: ["table_html"] });
+
+      if (job.status !== "completed" || !job.result) {
+        // job.error 可能是对象（如 { code: "could_not_parse", message: "..." }），
+        // 直接模板拼接会输出 [object Object]，必须 JSON 序列化才可读
+        const jobError = job.error
+          ? `，错误：${typeof job.error === "string" ? job.error : JSON.stringify(job.error)}`
+          : "";
+        throw new Error(`Unstructured 解析失败：job ${jobId} 最终状态 ${job.status}${jobError}`);
+      }
+      elements = job.result.elements ?? [];
+    } else {
+      elements = outcome.body.elements ?? [];
     }
 
-    if (job.status !== "completed" || !job.result) {
-      throw new Error(`Unstructured 解析失败：job ${jobId} 最终状态 ${job.status}`);
+    return elements.map(toUnstructuredElement);
+  };
+
+  // 云服务存在间歇性 job failed（实测同文件 5 次请求约 3 败 2 成，
+  // 错误 could_not_parse，服务端偶发解析失败，非限流），
+  // 直接回退 pdf-parse 会丢失表格/标题结构，故失败重试（带递增退避），
+  // 重试耗尽才把错误抛给编排层做整体回退。
+  const MAX_ATTEMPTS = 5;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      return await runOnce();
+    } catch (err) {
+      lastError = err;
+      if (attempt < MAX_ATTEMPTS) {
+        console.warn(
+          `[unstructured] 第 ${attempt} 次解析未成功，${2 * attempt}s 后重试：${err instanceof Error ? err.message : String(err)}`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 2_000 * attempt));
+      }
     }
-    elements = job.result.elements ?? [];
-  } else {
-    elements = outcome.body.elements ?? [];
   }
-
-  return elements.map(toUnstructuredElement);
+  throw lastError;
 }
 
 /** SDK Element → 项目内部元素结构（对齐百度 OCR 页的版面语义） */
@@ -126,22 +162,52 @@ function toUnstructuredElement(el: TransformElement): UnstructuredElement {
     metadata: {
       page_number: el.metadata.pageNumber ?? 1,
       text_as_html: el.metadata.textAsHtml ?? undefined,
+      coordinates: el.metadata.coordinates
+        ? {
+            layout_width: el.metadata.coordinates.layout_width,
+            layout_height: el.metadata.coordinates.layout_height,
+            points: el.metadata.coordinates.points,
+          }
+        : undefined,
     },
   };
 }
 
-/** 把 `<table><tr><td>a</td><td>b</td></tr></table>` 简化为行文本（列用 | 分隔），保留行列结构 */
+/**
+ * 把 `<table>` 转成 GFM（GitHub Flavored Markdown）表格文本。
+ *
+ * 输出带表头分隔行（`| --- | --- |`）：主流 markdown 渲染器（marked / markdown-it 等）
+ * 只有看到表头 + 分隔行才会渲染成真正的表格；没有分隔行的 `|` 行会被当作普通文本段落
+ * （内容在、格式无），这正是「表格没展示出来」的直接原因。
+ * 第一行 `<th>` 视为表头，其余 `<td>` 为数据行，列数按最宽行补齐。
+ */
 export function htmlTableToText(html: string): string {
-  return html
-    .replace(/<table[^>]*>/gi, "")
-    .replace(/<tr[^>]*>/gi, "\n")
-    .replace(/<\/tr>/gi, "")
-    .replace(/<t[dh][^>]*>/gi, " | ")
-    .replace(/<\/t[dh]>/gi, "")
-    .replace(/<[^>]+>/g, "")
-    .replace(/\n\s*\|\s*/g, "\n") // 行首多余的列分隔符
-    .replace(/^\| /gm, "")
-    .trim();
+  // 按 <tr> 拆行、按 <td>/<th> 拆列，去掉单元格内其余标签
+  const rows: string[][] = [];
+  const trRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+  let trMatch: RegExpExecArray | null;
+  while ((trMatch = trRe.exec(html))) {
+    const cells: string[] = [];
+    const cellRe = /<t([dh])[^>]*>([\s\S]*?)<\/t\1>/gi;
+    let cellMatch: RegExpExecArray | null;
+    while ((cellMatch = cellRe.exec(trMatch[1]))) {
+      cells.push(cellMatch[2].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim());
+    }
+    rows.push(cells);
+  }
+
+  // 兜底：没解析出结构时至少清掉标签，避免原始 HTML 混入正文
+  if (rows.length === 0) {
+    return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  }
+
+  const colCount = Math.max(...rows.map((r) => r.length));
+  const fmt = (cells: string[]) =>
+    Array.from({ length: colCount }, (_, i) => cells[i] ?? "").join(" | ");
+  const sep = Array.from({ length: colCount }, () => "---").join(" | ");
+
+  const lines = rows.map(fmt);
+  return [`| ${lines[0]} |`, `| ${sep} |`, ...lines.slice(1).map((l) => `| ${l} |`)].join("\n");
 }
 
 /**
@@ -175,7 +241,8 @@ export function elementsToPageTexts(elements: UnstructuredElement[], totalPages:
         target.push(`[表格]\n${el.metadata?.text_as_html ? htmlTableToText(el.metadata.text_as_html) : text}`);
         break;
       case "ListItem":
-        target.push(`- ${text}`);
+        // Unstructured ListItem 文本自带项目符号（• 等），去掉后再统一加 "- "，避免「- • xxx」双符号
+        target.push(`- ${text.replace(/^[•·]\s*/, "").trim()}`);
         break;
       default:
         // NarrativeText / UncategorizedText 等按正文输出，段落之间自然换行

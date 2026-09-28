@@ -8,6 +8,9 @@ import { Document } from "@langchain/core/documents";
  * RecursiveCharacterTextSplitter 按段落/标题切分，因此这里不需要
  * 额外的 Markdown 结构化处理。
  *
+ * 注意：CRLF 行尾与 BOM 等编码脏数据不在此处理，由统一入口
+ * parseDocument 的 normalizeParsedText 统一清洗（一处覆盖 md/pdf/OCR）。
+ *
  * @param filePath Markdown 文件路径
  */
 export async function loadMarkdown(filePath: string): Promise<Document[]> {

@@ -13,7 +13,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-/** 任务事件载荷 —— 与 backend `@langchain-rag/shared/events` 的 TaskEventPayload 对齐 */
+/** 任务事件载荷 —— 与 ai-engine 的 TaskEventPayload 对齐 */
 export interface TaskStreamPayload {
   taskId: string;
   taskType: string;

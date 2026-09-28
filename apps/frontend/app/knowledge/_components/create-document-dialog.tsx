@@ -117,6 +117,9 @@ export function CreateDocumentDialog({ open, onOpenChange, onSubmit }: CreateDoc
       return;
     }
 
+    // 新建文档默认为 Markdown：文件名无扩展名时自动补 .md（如「产品需求文档」→「产品需求文档.md」）
+    const finalName = /\.\w+$/.test(trimmedName) ? trimmedName : `${trimmedName}.md`;
+
     const md = editorRef.current?.getMarkdown?.() ?? htmlToMd(editorRef.current?.getHTML?.() ?? "") ?? content;
     if (!md.trim()) {
       setError("请输入文档内容");
@@ -130,7 +133,7 @@ export function CreateDocumentDialog({ open, onOpenChange, onSubmit }: CreateDoc
     setFallbackDone(false);
     setFallbackError(null);
     try {
-      await onSubmit({ fileName: trimmedName, content: md.trim() });
+      await onSubmit({ fileName: finalName, content: md.trim() });
       // HTTP 成功即任务成功：SSE 无事件时用它兜底点亮完成；留一点时间让事件渲染
       setFallbackDone(true);
       setTimeout(() => {
@@ -176,11 +179,13 @@ export function CreateDocumentDialog({ open, onOpenChange, onSubmit }: CreateDoc
 
         <div className="flex-1 space-y-4 overflow-y-auto py-2">
           {progressActive ? (
-            /* 提交中：展示分步进度（解析 → 切片 → 向量化 → 完成），SSE 事件驱动 */
+            // 提交中：展示分步进度（数据清洗 → 切片 → 向量化 → 完成）。
+            // 新建内容来自编辑器（非文件），无「解析」步骤；
+            // 与 createDocument 事件 step1-3 + completed 一一对应；SSE 事件驱动
             <TaskProgressPanel
               enabled={open}
               active={progressActive}
-              labels={["解析", "切片", "向量化", "完成"]}
+              labels={["数据清洗", "切片", "向量化", "完成"]}
               fallbackDone={fallbackDone}
               fallbackError={fallbackError}
               resetKey={resetKey}

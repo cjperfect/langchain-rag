@@ -1,11 +1,15 @@
 /**
- * 任务状态事件 —— 统一 task.* 命名空间
+ * 任务事件定义 + 事件总线（ai-engine 内建）
  *
- * 设计原则：一份扁平 payload 携带各阶段字段（可选），监听器无需按事件名窄化类型；
- * withTaskEvents 帮手包揽 started / completed / failed 三段生命周期，
- * 业务代码只写 run 回调，需要中间进度时手动 emit PROGRESS 即可。
+ * 原实现把事件定义与 holder 放在 shared 包（setEventBus 注入 Nest 实例），
+ * 现改为 ai-engine 自带一个 Node 原生 EventEmitter 实例（taskBus）：
+ *  - ai-engine 内部 emit(...) 直接发到 taskBus，零依赖、可独立运行/单测；
+ *  - backend bootstrap 时把 taskBus 桥接到 NestJS EventEmitter2
+ *    （taskBus.on(...) → nestBus.emit(...)），@OnEvent 监听器照常工作；
+ *  - 去掉 shared 的 events 部分后，backend 不再依赖 shared/events。
  */
-import { emit } from "./event-bus";
+
+import { EventEmitter } from "node:events";
 
 /**
  * 任务类型枚举
@@ -66,6 +70,20 @@ export interface TaskEventPayload {
 /** 生成任务唯一 ID（格式：taskType-uuid） */
 export function newTaskId(taskType: TaskType): string {
   return `${taskType}-${globalThis.crypto.randomUUID()}`;
+}
+
+/**
+ * 事件总线（ai-engine 内建实例）
+ *
+ * backend 启动时桥接：taskBus.on(event, payload => nestBus.emit(event, payload))，
+ * 之后 backend 的 @OnEvent 订阅者照常收到事件。ai-engine 未桥接时独立运行也安全
+ * （事件没有监听者只是没人接收，不影响业务）。
+ */
+export const taskBus = new EventEmitter();
+
+/** 触发事件（ai-engine 内部统一走这里） */
+export function emit(event: string, ...args: unknown[]): boolean {
+  return taskBus.emit(event, ...args);
 }
 
 /**

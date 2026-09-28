@@ -50,9 +50,28 @@ export class DocumentController {
     });
   }
 
+  /** 只解析不上库：返回解析文本 + 元数据，前端预览/编辑后确认入库 */
+  @Post("parse")
+  @UseInterceptors(FileInterceptor("file", { defParamCharset: "utf8", limits: { fileSize: MAX_UPLOAD_SIZE } }))
+  async parseDocumentOnly(
+    @Query("kbId", ParseIntPipe) kbId: number,
+    @UploadedFile() file: { buffer: Buffer; originalname: string; size: number },
+  ) {
+    return this.documentService.parseOnly(kbId, {
+      fileName: file.originalname,
+      buffer: file.buffer,
+      size: file.size,
+    });
+  }
+
   @Get(":docId/content")
   async getDocumentContent(@Param("docId", ParseIntPipe) docId: number) {
     return this.documentService.getDocumentContent(docId);
+  }
+
+  @Get(":docId/parsed")
+  async getParsedDocument(@Param("docId", ParseIntPipe) docId: number) {
+    return this.documentService.getParsedDocument(docId);
   }
 
   @Get(":docId/chunks")

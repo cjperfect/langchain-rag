@@ -1,6 +1,46 @@
 // src/index.ts
 import "dotenv/config";
 
+// src/events.ts
+import { EventEmitter } from "events";
+var TaskType = /* @__PURE__ */ ((TaskType2) => {
+  TaskType2["DOCUMENT_INDEX"] = "document_index";
+  TaskType2["RAG_SEARCH"] = "rag_search";
+  TaskType2["CHAT"] = "chat";
+  return TaskType2;
+})(TaskType || {});
+var TaskEvent = {
+  /** 任务开始 */
+  STARTED: "task.started",
+  /** 任务进度更新 */
+  PROGRESS: "task.progress",
+  /** 任务成功完成 */
+  COMPLETED: "task.completed",
+  /** 任务失败 */
+  FAILED: "task.failed"
+};
+function newTaskId(taskType) {
+  return `${taskType}-${globalThis.crypto.randomUUID()}`;
+}
+var taskBus = new EventEmitter();
+function emit(event, ...args) {
+  return taskBus.emit(event, ...args);
+}
+async function withTaskEvents(taskType, context, run) {
+  const taskId = newTaskId(taskType);
+  const startedAt = Date.now();
+  emit(TaskEvent.STARTED, { taskId, taskType, ...context });
+  try {
+    const result = await run(taskId);
+    emit(TaskEvent.COMPLETED, { taskId, taskType, durationMs: Date.now() - startedAt, result });
+    return result;
+  } catch (err) {
+    const e = err instanceof Error ? err : new Error(String(err));
+    emit(TaskEvent.FAILED, { taskId, taskType, durationMs: Date.now() - startedAt, error: e.message, stack: e.stack });
+    throw err;
+  }
+}
+
 // src/agent/index.ts
 import { HumanMessage as HumanMessage2 } from "@langchain/core/messages";
 import { createAgent } from "langchain";
@@ -66,23 +106,96 @@ import { z } from "zod";
 
 // src/rag/rag.service.ts
 import { PGVectorStore } from "@langchain/community/vectorstores/pgvector";
-import { Document } from "@langchain/core/documents";
+import { Document as Document2 } from "@langchain/core/documents";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 
 // src/embeddings/embedding.service.ts
 import { OllamaEmbeddings } from "@langchain/ollama";
+var EMBEDDING_PROVIDER = (process.env.EMBEDDING_PROVIDER ?? "ollama").trim().toLowerCase();
 var EMBEDDING_BASE_URL = process.env.EMBEDDING_BASE_URL ?? "http://localhost:11434";
 var EMBEDDING_MODEL = process.env.EMBEDDING_MODEL ?? "qwen3-embedding:0.6b";
-var baseEmbeddingConfig = {
-  model: EMBEDDING_MODEL,
-  baseUrl: EMBEDDING_BASE_URL,
-  batchSize: 32,
-  stripNewLines: false
+var EMBEDDING_API_KEY = (process.env.EMBEDDING_API_KEY ?? "").trim();
+var EMBEDDING_DIMENSIONS = Number(process.env.EMBEDDING_DIMENSIONS ?? "1024");
+var ARK_EMBEDDING_URL = "https://ark.cn-beijing.volces.com/api/v3";
+var ArkMultimodalEmbeddings = class {
+  model;
+  apiKey;
+  apiUrl;
+  dimensions;
+  concurrency;
+  constructor(config) {
+    this.model = config.model ?? EMBEDDING_MODEL;
+    this.apiKey = config.apiKey ?? EMBEDDING_API_KEY;
+    this.apiUrl = config.apiUrl ?? EMBEDDING_API_URL();
+    this.dimensions = config.dimensions ?? EMBEDDING_DIMENSIONS;
+    this.concurrency = config.concurrency ?? 8;
+  }
+  /** 批量向量化：逐条请求（每条独立向量）+ 固定并发池，按输入顺序返回 */
+  async embedDocuments(texts) {
+    const results = [];
+    let next = 0;
+    const worker = async () => {
+      while (next < texts.length) {
+        const i = next++;
+        results[i] = await this.requestOne(texts[i]);
+      }
+    };
+    const workers = Array.from(
+      { length: Math.min(this.concurrency, texts.length) },
+      () => worker()
+    );
+    await Promise.all(workers);
+    return results;
+  }
+  /** 单条查询向量化 */
+  async embedQuery(text) {
+    return this.requestOne(text);
+  }
+  /** 发起单条多模态 embedding 请求（input 恒为单元素，保证返回独立向量） */
+  async requestOne(text) {
+    const body = {
+      model: this.model,
+      encoding_format: "float",
+      dimensions: this.dimensions,
+      input: [{ type: "text", text }]
+    };
+    const res = await fetch(`${this.apiUrl}/embeddings/multimodal`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.apiKey}` },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(3e4)
+    });
+    if (!res.ok) {
+      throw new Error(
+        `\u8C46\u5305 embedding \u8BF7\u6C42\u5931\u8D25\uFF1AHTTP ${res.status} ${(await res.text()).slice(0, 200)}`
+      );
+    }
+    const data = await res.json();
+    const item = Array.isArray(data.data) ? data.data[0] : data.data;
+    const vector = item?.embedding ?? [];
+    if (vector.length !== this.dimensions) {
+      throw new Error(
+        `\u8C46\u5305 embedding \u7EF4\u5EA6\u5F02\u5E38\uFF1A\u671F\u671B ${this.dimensions}\uFF0C\u5B9E\u9645 ${vector.length}`
+      );
+    }
+    return vector;
+  }
 };
+function EMBEDDING_API_URL() {
+  return (process.env.EMBEDDING_API_URL ?? "").trim() || ARK_EMBEDDING_URL;
+}
 function createEmbeddings(modelName) {
+  if (EMBEDDING_PROVIDER === "ark") {
+    if (!EMBEDDING_API_KEY) {
+      throw new Error(
+        "\u7F3A\u5C11\u8C46\u5305 embedding \u914D\u7F6E\uFF1A\u8BF7\u8BBE\u7F6E EMBEDDING_API_KEY\uFF08EMBEDDING_PROVIDER=ark \u65F6\u5FC5\u586B\uFF09"
+      );
+    }
+    return new ArkMultimodalEmbeddings({ model: modelName ?? EMBEDDING_MODEL });
+  }
   return new OllamaEmbeddings({
-    ...baseEmbeddingConfig,
-    model: modelName ?? EMBEDDING_MODEL
+    model: modelName ?? EMBEDDING_MODEL,
+    baseUrl: EMBEDDING_BASE_URL
   });
 }
 var defaultEmbeddings = createEmbeddings();
@@ -330,425 +443,6 @@ var LexicalIndexService = class {
 };
 var lexicalIndex = new LexicalIndexService();
 
-// src/rag/rag.service.ts
-import { emit, withTaskEvents, TaskEvent, TaskType } from "@langchain-rag/shared/events";
-var RRF_K = 60;
-var RagService = class {
-  vectorStore = null;
-  embeddings;
-  constructor(embeddings) {
-    this.embeddings = embeddings ?? defaultEmbeddings;
-  }
-  /** 初始化 PGVectorStore（延迟初始化，避免模块加载时立即连接 DB） */
-  async getStore() {
-    if (this.vectorStore) return this.vectorStore;
-    const config = {
-      postgresConnectionOptions: {
-        connectionString: process.env.DATABASE_URL
-      },
-      tableName: RAG_TABLE_NAME,
-      columns: {
-        idColumnName: "id",
-        contentColumnName: "content",
-        metadataColumnName: "metadata",
-        vectorColumnName: "embedding"
-      },
-      distanceStrategy: "cosine",
-      scoreNormalization: "similarity"
-    };
-    this.vectorStore = await PGVectorStore.initialize(this.embeddings, {
-      ...config,
-      dimensions: RAG_EMBEDDING_DIMENSIONS
-    });
-    lexicalIndex.attach(this.vectorStore.pool);
-    return this.vectorStore;
-  }
-  /**
-   * 索引文档：切片 + 向量化，返回切片数据供后端写 DB
-   *
-   * @param kbId 知识库 ID
-   * @param documentId 文档 ID
-   * @param content 文档全文
-   * @param names 知识库名称 / 文档文件名（存入 vector metadata，检索时直接返回）
-   * @param taskId 可选：外层任务已存在时复用其 taskId（跳过 started/completed 生命周期，
-   *               只发 progress），避免「上传」外层任务与「索引」内层任务嵌套成两个 taskId、
-   *               前端按第一个锚定后丢掉内层事件
-   * @param stepOffset 步骤起始编号（外层任务已用掉 step1/2 时从 3 开始）
-   * @returns 切片列表（含序号和 token 估算）
-   */
-  async indexDocument(kbId, documentId, content, names, taskId, stepOffset = 1) {
-    if (taskId) {
-      return this.vectorize(kbId, documentId, content, names, taskId, stepOffset);
-    }
-    return withTaskEvents(
-      TaskType.DOCUMENT_INDEX,
-      { kbId, documentId, message: `\u7D22\u5F15\u6587\u6863 #${documentId}` },
-      (tid) => this.vectorize(kbId, documentId, content, names, tid, stepOffset)
-    );
-  }
-  /**
-   * 重建索引：删除旧向量 → 重新切片 → 重新向量化
-   */
-  async reindexDocument(documentId, kbId, content, names, taskId, stepOffset = 1) {
-    if (taskId) {
-      await this.deleteByDocumentId(documentId);
-      emit(TaskEvent.PROGRESS, { taskId, taskType: TaskType.DOCUMENT_INDEX, step: stepOffset, message: "\u5DF2\u5220\u9664\u65E7\u5411\u91CF" });
-      return this.vectorize(kbId, documentId, content, names, taskId, stepOffset + 1);
-    }
-    return withTaskEvents(TaskType.DOCUMENT_INDEX, { kbId, documentId, message: `\u91CD\u5EFA\u7D22\u5F15\u6587\u6863 #${documentId}` }, async (tid) => {
-      await this.deleteByDocumentId(documentId);
-      emit(TaskEvent.PROGRESS, { taskId: tid, taskType: TaskType.DOCUMENT_INDEX, step: 1, message: "\u5DF2\u5220\u9664\u65E7\u5411\u91CF" });
-      return this.vectorize(kbId, documentId, content, names, tid, 2);
-    });
-  }
-  /**
-   * 切片 + 向量化核心逻辑（不发 started/completed，由 withTaskEvents 统一发）
-   *
-   * @param taskId 任务 ID（用于发进度事件）
-   * @param stepOffset 步骤偏移（重建索引时前面多了"删旧向量"一步）
-   */
-  async vectorize(kbId, documentId, content, names, taskId, stepOffset = 1) {
-    const texts = await splitTextToChunks(content);
-    if (texts.length === 0) return [];
-    emit(TaskEvent.PROGRESS, { taskId, taskType: TaskType.DOCUMENT_INDEX, step: stepOffset, message: `\u5207\u7247\u5B8C\u6210\uFF08${texts.length} \u7247\uFF09\uFF0C\u5F00\u59CB\u5411\u91CF\u5316` });
-    const store = await this.getStore();
-    const docs = texts.map(
-      (text, i) => new Document({
-        pageContent: text,
-        metadata: {
-          documentId,
-          kbId,
-          chunkIndex: i + 1,
-          kbName: names?.kbName,
-          documentName: names?.documentName
-        }
-      })
-    );
-    await store.addDocuments(docs);
-    await lexicalIndex.addChunks(
-      kbId,
-      documentId,
-      { kbName: names?.kbName, documentName: names?.documentName },
-      texts.map((text, i) => ({ content: text, index: i + 1 }))
-    );
-    emit(TaskEvent.PROGRESS, { taskId, taskType: TaskType.DOCUMENT_INDEX, step: stepOffset + 1, message: "\u5411\u91CF\u5316\u5B8C\u6210" });
-    return texts.map((text, i) => ({
-      content: text,
-      index: i + 1,
-      tokenCount: Math.ceil(text.length / 2)
-    }));
-  }
-  /**
-   * 检索（默认混合模式）
-   *
-   * - semantic：向量余弦相似度，长于语义近似（"如何请假" 能命中 "休假申请流程"）
-   * - keyword：BM25 词法匹配，长于精确词（型号、错误码、人名等专有名词）
-   * - hybrid：两路各取候选，用 RRF 融合排名 —— rank 求和不用原始分，
-   *   天然规避"余弦分 0~1 与 BM25 分无上界"不可比的问题
-   *
-   * @param query 用户问题
-   * @param options.kbIds 限制在指定知识库
-   * @param options.k top-K
-   * @param options.mode 检索模式，默认 hybrid
-   */
-  async search(query, options = {}) {
-    const { kbIds, k = 5, mode = "hybrid" } = options;
-    const fetchK = Math.max(k * 2, 10);
-    return withTaskEvents(TaskType.RAG_SEARCH, { kbIds, message: `\u68C0\u7D22\uFF1A${query.slice(0, 50)}` }, async () => {
-      await this.getStore();
-      const lists = [];
-      if (mode !== "keyword") lists.push(await this.semanticSearch(query, kbIds, fetchK));
-      if (mode !== "semantic") lists.push(await lexicalIndex.search(query, { kbIds, k: fetchK }));
-      if (mode !== "hybrid") return lists[0].slice(0, k);
-      return fuseRrf(lists, k);
-    });
-  }
-  /** 向量相似度检索 */
-  async semanticSearch(query, kbIds, k) {
-    const store = await this.getStore();
-    const filter = kbIds && kbIds.length > 0 ? { kbId: { in: kbIds } } : void 0;
-    const results = await store.similaritySearchWithScore(query, k, filter);
-    return results.map(([doc, score]) => {
-      const metadata = doc.metadata;
-      return {
-        content: doc.pageContent,
-        documentId: metadata.documentId,
-        kbId: metadata.kbId,
-        kbName: metadata.kbName,
-        documentName: metadata.documentName,
-        chunkIndex: metadata.chunkIndex,
-        score,
-        matchType: "semantic"
-      };
-    });
-  }
-  /**
-   * 删除某个文档的所有索引（向量 + BM25 词法）
-   *
-   * PGVectorStore 通过 metadata 过滤删除
-   */
-  async deleteByDocumentId(documentId) {
-    const store = await this.getStore();
-    await store.delete({ filter: { documentId } });
-    await lexicalIndex.deleteByDocumentId(documentId);
-  }
-};
-function fuseRrf(lists, k) {
-  const fused = /* @__PURE__ */ new Map();
-  for (const list of lists) {
-    list.forEach((result, rank) => {
-      const key = `${result.documentId}#${result.chunkIndex ?? -1}`;
-      const entry = fused.get(key) ?? { result, rrf: 0, matched: /* @__PURE__ */ new Set() };
-      entry.rrf += 1 / (RRF_K + rank + 1);
-      entry.matched.add(result.matchType);
-      fused.set(key, entry);
-    });
-  }
-  const maxRrf = lists.length / (RRF_K + 1);
-  return [...fused.values()].sort((a, b) => b.rrf - a.rrf).slice(0, k).map(({ result, rrf, matched }) => ({
-    ...result,
-    score: rrf / maxRrf,
-    matchType: matched.size > 1 ? "both" : [...matched][0]
-  }));
-}
-async function splitTextToChunks(text) {
-  const splitter = new RecursiveCharacterTextSplitter({
-    chunkSize: 500,
-    chunkOverlap: 50,
-    separators: ["\n\n", "\n", "\u3002", "\uFF01", "\uFF1F", "\uFF1B", "\uFF0C", " ", ""]
-  });
-  const docs = await splitter.createDocuments([text]);
-  return docs.map((d) => d.pageContent).filter(Boolean);
-}
-var ragService = new RagService();
-
-// src/tools/knowledge-search.ts
-function chunkKey(r) {
-  return `${r.kbId}:${r.documentId}:${r.chunkIndex ?? ""}:${r.content}`;
-}
-function appendScopedResults(scope, results) {
-  if (!scope) return;
-  const seen = new Set(scope.results.map(chunkKey));
-  for (const r of results) {
-    const key = chunkKey(r);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    scope.results.push(r);
-  }
-}
-function isRetrievalScope(value) {
-  return typeof value === "object" && value !== null && "results" in value && Array.isArray(value.results);
-}
-function readRetrievalScope(config) {
-  const raw = config?.configurable?.retrieval;
-  return isRetrievalScope(raw) ? raw : void 0;
-}
-function readScopedKbIds(config) {
-  const raw = config?.configurable?.kbIds;
-  if (!Array.isArray(raw)) return [];
-  return raw.filter((value) => typeof value === "number");
-}
-var MATCH_LABELS = {
-  both: "\u8BED\u4E49+\u5173\u952E\u8BCD",
-  semantic: "\u8BED\u4E49",
-  keyword: "\u5173\u952E\u8BCD"
-};
-var knowledgeSearchTool = tool(
-  async ({ query }, config) => {
-    const kbIds = readScopedKbIds(config);
-    if (kbIds.length === 0) {
-      return "\u5F53\u524D\u4F1A\u8BDD\u672A\u6307\u5B9A\u77E5\u8BC6\u5E93\uFF0C\u65E0\u6CD5\u68C0\u7D22\u3002\u8BF7\u63D0\u793A\u7528\u6237\u5148\u9009\u62E9\u8981\u67E5\u8BE2\u7684\u77E5\u8BC6\u5E93\u3002";
-    }
-    const results = await ragService.search(query, { kbIds, k: 5 });
-    appendScopedResults(readRetrievalScope(config), results);
-    if (results.length === 0) {
-      return "\u672A\u627E\u5230\u76F8\u5173\u6587\u6863\u3002\u8BF7\u544A\u77E5\u7528\u6237\u5F53\u524D\u77E5\u8BC6\u5E93\u4E2D\u6CA1\u6709\u5339\u914D\u7684\u4FE1\u606F\u3002";
-    }
-    return results.map(
-      (r, i) => `[\u6587\u6863\u7247\u6BB5 ${i + 1}] \u6765\u6E90: ${r.kbName ?? `\u77E5\u8BC6\u5E93#${r.kbId}`}${r.documentName ? `/${r.documentName}` : ""} (\u5339\u914D: ${MATCH_LABELS[r.matchType] ?? r.matchType}, \u5F97\u5206: ${(r.score * 100).toFixed(1)}%)
-${r.content}`
-    ).join("\n\n");
-  },
-  {
-    name: "search_knowledge_base",
-    description: `\u5728\u672C\u6B21\u4F1A\u8BDD\u6307\u5B9A\u7684\u77E5\u8BC6\u5E93\u4E2D\u68C0\u7D22\u76F8\u5173\u6587\u6863\u5185\u5BB9\uFF08\u5411\u91CF\u8BED\u4E49 + BM25 \u5173\u952E\u8BCD\u6DF7\u5408\u68C0\u7D22\uFF09\u3002
-\u9002\u7528\u573A\u666F\uFF1A
-- \u7528\u6237\u8BE2\u95EE\u516C\u53F8\u653F\u7B56\u3001\u6D41\u7A0B\u3001\u89C4\u8303\u3001\u4EA7\u54C1\u6587\u6863\u7B49\u5185\u90E8\u8D44\u6599
-- \u9700\u8981\u67E5\u627E\u7279\u5B9A\u4E1A\u52A1\u77E5\u8BC6\u6216\u64CD\u4F5C\u6307\u5357
-- \u7528\u6237\u7684\u95EE\u9898\u9700\u8981\u57FA\u4E8E\u516C\u53F8\u6587\u6863\u6216\u4EA7\u54C1\u8BF4\u660E\u4E66\u6765\u56DE\u7B54
-
-\u6CE8\u610F\uFF1A
-- \u68C0\u7D22\u8303\u56F4\u7531\u4F1A\u8BDD\u8BBE\u5B9A\uFF1A\u4F60\u53EA\u80FD\u51B3\u5B9A\u300C\u67E5\u4EC0\u4E48\u300D\uFF0C\u65E0\u6CD5\u6539\u53D8\u300C\u80FD\u67E5\u54EA\u4E9B\u5E93\u300D\u3002\u672A\u6307\u5B9A\u77E5\u8BC6\u5E93\u65F6\u5DE5\u5177\u4F1A\u76F4\u63A5\u8FD4\u56DE\u63D0\u793A\u3002
-- \u68C0\u7D22\u7ED3\u679C\u6309\u6DF7\u5408\u76F8\u5173\u6027\u6392\u5E8F\uFF0C\u53EF\u80FD\u4E0D\u5B8C\u5168\u7CBE\u786E\u3002
-- \u4E00\u6B21\u4E0D\u7406\u60F3\u65F6\u6539\u5199\u67E5\u8BE2\u8BCD\uFF08\u8BBE\u5907\u578B\u53F7\u3001\u6545\u969C\u7801\u3001\u529F\u80FD\u5173\u952E\u8BCD\uFF09\u518D\u8BD5\uFF0C\u6700\u591A\u91CD\u8BD5\u4E24\u6B21\u3002
-- \u68C0\u7D22\u65E0\u7ED3\u679C\u65F6\u8BF7\u660E\u786E\u544A\u77E5\u7528\u6237\u77E5\u8BC6\u5E93\u4E2D\u6CA1\u6709\u76F8\u5173\u4FE1\u606F\uFF0C\u4E0D\u8981\u51ED\u8BB0\u5FC6\u8865\u5168\u3002`,
-    schema: z.object({
-      query: z.string().describe("\u68C0\u7D22\u67E5\u8BE2\u8BED\u53E5\uFF1B\u5EFA\u8BAE\u4F7F\u7528\u95EE\u9898\u4E2D\u7684\u5173\u952E\u8BCD\uFF0C\u9996\u6B21\u4E0D\u7406\u60F3\u65F6\u53EF\u6362\u7528\u578B\u53F7\u3001\u6545\u969C\u7801\u7B49\u529F\u80FD\u5173\u952E\u8BCD")
-    })
-  }
-);
-
-// src/agent/index.ts
-import { emit as emit2, newTaskId, TaskEvent as TaskEvent2, TaskType as TaskType2 } from "@langchain-rag/shared/events";
-
-// src/libs/messages.ts
-import { HumanMessage, AIMessage, SystemMessage } from "@langchain/core/messages";
-function toLangChainMessages(messages) {
-  return messages.map((m) => {
-    switch (m.role) {
-      case "user":
-        return new HumanMessage(m.content);
-      case "assistant":
-        return new AIMessage(m.content);
-      case "system":
-        return new SystemMessage(m.content);
-    }
-  });
-}
-
-// src/agent/index.ts
-function readQuery(data) {
-  if (typeof data !== "object" || data === null || !("input" in data)) return "";
-  const wrapper = data.input;
-  if (typeof wrapper !== "object" || wrapper === null || !("input" in wrapper)) return "";
-  const serialized = wrapper.input;
-  if (typeof serialized !== "string") return "";
-  try {
-    const parsed = JSON.parse(serialized);
-    if (typeof parsed === "object" && parsed !== null && "query" in parsed && typeof parsed.query === "string") {
-      return parsed.query;
-    }
-  } catch {
-  }
-  return "";
-}
-function readToolOutput(output) {
-  if (typeof output === "string") return output;
-  if (typeof output === "object" && output !== null && "content" in output && typeof output.content === "string") {
-    return output.content;
-  }
-  return void 0;
-}
-var AiEngine = class _AiEngine {
-  /**
-   * Agent 全局单例
-   */
-  static agent = createAgent({
-    model: defaultModel,
-    tools: [knowledgeSearchTool],
-    systemPrompt
-  });
-  /** 获取 agent（需要切换模型时创建新实例） */
-  getAgent(modelName) {
-    const currentModel = defaultModel.model;
-    if (!modelName || modelName === currentModel) return _AiEngine.agent;
-    return createAgent({
-      model: createModel(modelName),
-      tools: [knowledgeSearchTool],
-      systemPrompt
-    });
-  }
-  /**
-   * 普通对话
-   */
-  async chat(input, options = {}) {
-    const messages = [...toLangChainMessages(options.history ?? []), new HumanMessage2(input)];
-    const res = await this.getAgent(options.model).invoke(
-      { messages },
-      { configurable: { kbIds: options.kbIds } }
-    );
-    const last = res.messages.at(-1);
-    return typeof last?.content === "string" ? last.content : JSON.stringify(last?.content);
-  }
-  /**
-   * 流式对话
-   */
-  async *stream(input, options = {}) {
-    const messages = [...toLangChainMessages(options.history ?? []), new HumanMessage2(input)];
-    const stream = await this.getAgent(options.model).stream(
-      { messages },
-      { streamMode: "messages", configurable: { kbIds: options.kbIds } }
-    );
-    for await (const [chunk] of stream) {
-      if (typeof chunk.content === "string") {
-        yield chunk.content;
-      }
-    }
-  }
-  /**
-   * 流式对话 + 观察整个执行过程（token + tool + chain）
-   *
-   * 流式是 AsyncGenerator，包不进 withTaskEvents，手动发三段生命周期事件：
-   * started → （逐 token 流式）→ completed / failed。
-   * 工具调用的明细不再单独 emit——前端经 SSE 的 tool_start/tool_end 已能看到。
-   *
-   * 检索完全交给 agent：这里不做预检索，由模型自行决定是否调用检索工具。
-   * 检索作用域（kbIds）与结果归属都经 `configurable` 下传给工具，
-   * 结果写在每次调用新建的 `retrieval` 对象上——不用模块级变量，并发会话不会互相污染。
-   */
-  async *streamEvents(input, options = {}) {
-    const taskId = newTaskId(TaskType2.CHAT);
-    const startedAt = Date.now();
-    emit2(TaskEvent2.STARTED, { taskId, taskType: TaskType2.CHAT, message: `\u5BF9\u8BDD\uFF1A${input.slice(0, 50)}` });
-    const retrieval = { results: [] };
-    try {
-      const messages = [...toLangChainMessages(options.history ?? []), new HumanMessage2(input)];
-      const stream = await this.getAgent(options.model).streamEvents(
-        { messages },
-        { version: "v2", configurable: { kbIds: options.kbIds, retrieval } }
-      );
-      for await (const event of stream) {
-        switch (event.event) {
-          case "on_chat_model_stream": {
-            const chunk = event.data.chunk;
-            const reasoning = chunk.additional_kwargs?.reasoning || chunk.additional_kwargs?.reasoning_content;
-            if (typeof reasoning === "string" && reasoning) {
-              yield { type: "reasoning", content: reasoning };
-            }
-            if (typeof chunk.content === "string" && chunk.content) {
-              yield { type: "token", content: chunk.content };
-            }
-            break;
-          }
-          // 知识库检索工具 → 专用事件，前端可展示检索状态 + 知识库名称
-          case "on_tool_start":
-            if (event.name === "search_knowledge_base") {
-              yield { type: "knowledge_search", query: readQuery(event.data), kbIds: options.kbIds };
-            } else {
-              yield { type: "tool_start", name: event.name };
-            }
-            break;
-          case "on_tool_end":
-            if (event.name === "search_knowledge_base") {
-              const docs = retrieval.results;
-              const kbNames = [...new Set(docs.map((r) => r.kbName).filter((name) => typeof name === "string"))];
-              yield {
-                type: "knowledge_search",
-                query: "",
-                kbIds: options.kbIds,
-                kbNames,
-                results: readToolOutput(event.data.output),
-                docs
-              };
-            } else {
-              yield {
-                type: "tool_end",
-                name: event.name,
-                result: readToolOutput(event.data.output)
-              };
-            }
-            break;
-        }
-      }
-      emit2(TaskEvent2.COMPLETED, { taskId, taskType: TaskType2.CHAT, durationMs: Date.now() - startedAt });
-    } catch (err) {
-      const e = err instanceof Error ? err : new Error(String(err));
-      emit2(TaskEvent2.FAILED, { taskId, taskType: TaskType2.CHAT, durationMs: Date.now() - startedAt, error: e.message, stack: e.stack });
-      throw err;
-    }
-  }
-};
-
 // src/loaders/pdf/loader.ts
 import { readFileSync } from "fs";
 import { PDFParse } from "pdf-parse";
@@ -870,33 +564,52 @@ async function parsePdfWithUnstructured(pdfBuffer, _options = {}) {
   }
   const { TransformClient, isAccepted } = await import("unstructured-transform-client");
   const client = new TransformClient({ apiKey });
-  const outcome = await client.parse.run({
-    input: { data: pdfBuffer, filename: "document.pdf" },
-    output: "elements",
-    include: ["table_html"],
-    waitSeconds: 0
-    // 不阻塞，拿 job handle 后自行轮询，便于统一超时控制
-  });
-  let elements = [];
-  if (isAccepted(outcome)) {
-    const jobId = outcome.body.id;
-    const deadline = Date.now() + UNSTRUCTURED_TIMEOUT_MS;
-    let job = await client.jobs.get(jobId, { output: "elements", include: ["table_html"] });
-    while (job.status === "queued" || job.status === "processing") {
-      if (Date.now() >= deadline) {
-        throw new Error(`Unstructured \u89E3\u6790\u8D85\u65F6\uFF1Ajob ${jobId} \u5728 ${UNSTRUCTURED_TIMEOUT_MS / 1e3}s \u5185\u672A\u5B8C\u6210\uFF08\u72B6\u6001 ${job.status}\uFF09`);
+  const runOnce = async () => {
+    const outcome = await client.parse.run({
+      input: { data: pdfBuffer, filename: "document.pdf" },
+      output: "elements",
+      include: ["table_html", "coordinates"],
+      waitSeconds: 0
+      // 不阻塞，拿 job handle 后自行轮询，便于统一超时控制
+    });
+    let elements = [];
+    if (isAccepted(outcome)) {
+      const jobId = outcome.body.id;
+      const deadline = Date.now() + UNSTRUCTURED_TIMEOUT_MS;
+      let job = await client.jobs.get(jobId, { output: "elements", include: ["table_html", "coordinates"] });
+      while (job.status === "queued" || job.status === "processing") {
+        if (Date.now() >= deadline) {
+          throw new Error(`Unstructured \u89E3\u6790\u8D85\u65F6\uFF1Ajob ${jobId} \u5728 ${UNSTRUCTURED_TIMEOUT_MS / 1e3}s \u5185\u672A\u5B8C\u6210\uFF08\u72B6\u6001 ${job.status}\uFF09`);
+        }
+        await new Promise((resolve) => setTimeout(resolve, UNSTRUCTURED_POLL_INTERVAL_MS));
+        job = await client.jobs.get(jobId, { output: "elements", include: ["table_html"] });
       }
-      await new Promise((resolve) => setTimeout(resolve, UNSTRUCTURED_POLL_INTERVAL_MS));
-      job = await client.jobs.get(jobId, { output: "elements", include: ["table_html"] });
+      if (job.status !== "completed" || !job.result) {
+        const jobError = job.error ? `\uFF0C\u9519\u8BEF\uFF1A${typeof job.error === "string" ? job.error : JSON.stringify(job.error)}` : "";
+        throw new Error(`Unstructured \u89E3\u6790\u5931\u8D25\uFF1Ajob ${jobId} \u6700\u7EC8\u72B6\u6001 ${job.status}${jobError}`);
+      }
+      elements = job.result.elements ?? [];
+    } else {
+      elements = outcome.body.elements ?? [];
     }
-    if (job.status !== "completed" || !job.result) {
-      throw new Error(`Unstructured \u89E3\u6790\u5931\u8D25\uFF1Ajob ${jobId} \u6700\u7EC8\u72B6\u6001 ${job.status}`);
+    return elements.map(toUnstructuredElement);
+  };
+  const MAX_ATTEMPTS = 5;
+  let lastError;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      return await runOnce();
+    } catch (err) {
+      lastError = err;
+      if (attempt < MAX_ATTEMPTS) {
+        console.warn(
+          `[unstructured] \u7B2C ${attempt} \u6B21\u89E3\u6790\u672A\u6210\u529F\uFF0C${2 * attempt}s \u540E\u91CD\u8BD5\uFF1A${err instanceof Error ? err.message : String(err)}`
+        );
+        await new Promise((resolve) => setTimeout(resolve, 2e3 * attempt));
+      }
     }
-    elements = job.result.elements ?? [];
-  } else {
-    elements = outcome.body.elements ?? [];
   }
-  return elements.map(toUnstructuredElement);
+  throw lastError;
 }
 function toUnstructuredElement(el) {
   return {
@@ -905,12 +618,36 @@ function toUnstructuredElement(el) {
     text: el.text ?? "",
     metadata: {
       page_number: el.metadata.pageNumber ?? 1,
-      text_as_html: el.metadata.textAsHtml ?? void 0
+      text_as_html: el.metadata.textAsHtml ?? void 0,
+      coordinates: el.metadata.coordinates ? {
+        layout_width: el.metadata.coordinates.layout_width,
+        layout_height: el.metadata.coordinates.layout_height,
+        points: el.metadata.coordinates.points
+      } : void 0
     }
   };
 }
 function htmlTableToText(html) {
-  return html.replace(/<table[^>]*>/gi, "").replace(/<tr[^>]*>/gi, "\n").replace(/<\/tr>/gi, "").replace(/<t[dh][^>]*>/gi, " | ").replace(/<\/t[dh]>/gi, "").replace(/<[^>]+>/g, "").replace(/\n\s*\|\s*/g, "\n").replace(/^\| /gm, "").trim();
+  const rows = [];
+  const trRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+  let trMatch;
+  while (trMatch = trRe.exec(html)) {
+    const cells = [];
+    const cellRe = /<t([dh])[^>]*>([\s\S]*?)<\/t\1>/gi;
+    let cellMatch;
+    while (cellMatch = cellRe.exec(trMatch[1])) {
+      cells.push(cellMatch[2].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim());
+    }
+    rows.push(cells);
+  }
+  if (rows.length === 0) {
+    return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  }
+  const colCount = Math.max(...rows.map((r) => r.length));
+  const fmt = (cells) => Array.from({ length: colCount }, (_, i) => cells[i] ?? "").join(" | ");
+  const sep = Array.from({ length: colCount }, () => "---").join(" | ");
+  const lines = rows.map(fmt);
+  return [`| ${lines[0]} |`, `| ${sep} |`, ...lines.slice(1).map((l) => `| ${l} |`)].join("\n");
 }
 function elementsToPageTexts(elements, totalPages) {
   const pages = Array.from({ length: totalPages }, () => []);
@@ -930,13 +667,188 @@ function elementsToPageTexts(elements, totalPages) {
 ${el.metadata?.text_as_html ? htmlTableToText(el.metadata.text_as_html) : text}`);
         break;
       case "ListItem":
-        target.push(`- ${text}`);
+        target.push(`- ${text.replace(/^[•·]\s*/, "").trim()}`);
         break;
       default:
         target.push(text);
     }
   }
   return pages.map((lines) => lines.join("\n"));
+}
+
+// src/loaders/pdf/image-semantic.ts
+import sharp from "sharp";
+function getConfig() {
+  return {
+    provider: (process.env.IMAGE_VLM_PROVIDER ?? "none").trim().toLowerCase(),
+    apiKey: (process.env.IMAGE_VLM_API_KEY ?? "").trim(),
+    model: process.env.IMAGE_VLM_MODEL ?? "doubao-seed-1.6-vision-250815",
+    maxImages: Number(process.env.IMAGE_VLM_MAX_IMAGES ?? 20),
+    concurrency: Math.max(1, Number(process.env.IMAGE_VLM_CONCURRENCY ?? 3)),
+    timeoutMs: Number(process.env.IMAGE_VLM_TIMEOUT_MS ?? 3e4)
+  };
+}
+function isImageSemanticEnabled() {
+  const cfg = getConfig();
+  return cfg.provider === "ark" && cfg.apiKey.length > 0;
+}
+var MIN_IMAGE_PT = 60;
+var MAX_PAGE_RATIO = 0.85;
+async function detectPdfImageBlocks(pdfBuffer, onlyPages) {
+  const { Document: Document3, Device, Matrix } = await import("mupdf");
+  const doc = Document3.openDocument(pdfBuffer, "application/pdf");
+  try {
+    const pages = doc.countPages();
+    const blocks = [];
+    const filterByPage = onlyPages && onlyPages.size > 0;
+    for (let i = 0; i < pages; i++) {
+      if (filterByPage && !onlyPages.has(i + 1)) continue;
+      const page = doc.loadPage(i);
+      const [pageX0, pageY0, pageX1, pageY1] = page.getBounds();
+      const pageW = pageX1 - pageX0;
+      const pageH = pageY1 - pageY0;
+      const displayList = page.toDisplayList();
+      const device = new Device({
+        fillImage(image, ctm) {
+          const m = Array.from(ctm);
+          const x0 = m[4];
+          const y0 = m[5];
+          const w = Math.abs(m[0]);
+          const h = Math.abs(m[3]);
+          if (w < MIN_IMAGE_PT || h < MIN_IMAGE_PT) return;
+          if (pageW > 0 && pageH > 0 && w * h / (pageW * pageH) > MAX_PAGE_RATIO) return;
+          blocks.push({
+            page: i + 1,
+            bbox: {
+              x0: Math.max(pageX0, Math.min(x0, x0 + w)),
+              y0: Math.max(pageY0, Math.min(y0, y0 + h)),
+              x1: Math.min(pageX1, Math.max(x0, x0 + w)),
+              y1: Math.min(pageY1, Math.max(y0, y0 + h))
+            }
+          });
+        }
+      });
+      displayList.run(device, Matrix.identity);
+    }
+    return blocks;
+  } finally {
+    doc.destroy?.();
+  }
+}
+var ARK_CHAT_URL = "https://ark.cn-beijing.volces.com/api/v3/chat/completions";
+function apiUrl() {
+  return (process.env.IMAGE_VLM_API_URL ?? "").trim() || ARK_CHAT_URL;
+}
+var VLM_PROMPT = `\u4F60\u662F\u6587\u6863\u7248\u9762\u5206\u6790\u52A9\u624B\u3002\u4EE5\u4E0B\u662F PDF \u4E2D\u63D0\u53D6\u7684\u4E00\u5F20\u56FE\u7247\u3002
+\u8BF7\u5224\u65AD\u5B83\u662F\u5426\u5C5E\u4E8E\u300C\u7ED3\u6784\u56FE\u300D\uFF08\u6D41\u7A0B\u56FE\u3001\u67B6\u6784\u56FE\u3001\u65F6\u5E8F\u56FE\u3001\u7EC4\u7EC7\u67B6\u6784\u56FE\u3001\u4FE1\u606F\u56FE\u7B49\u8868\u8FBE\u6A21\u5757/\u5C42\u7EA7/\u8FDE\u63A5\u5173\u7CFB\u7684\u56FE\uFF09\uFF1A
+- \u662F\u7ED3\u6784\u56FE \u2192 \u7528\u4E2D\u6587\u7ED3\u6784\u5316\u63CF\u8FF0\uFF1A\u56FE\u7684\u7C7B\u578B\u3001\u4E3B\u8981\u8282\u70B9/\u6A21\u5757\u4E0E\u5C42\u7EA7\u3001\u8282\u70B9\u4E4B\u95F4\u7684\u8FDE\u63A5\u5173\u7CFB\uFF08\u7528\u300C\u2192\u300D\u300C\u4F9D\u8D56\u300D\u300C\u5305\u542B\u300D\u300C\u5171\u4EAB\u300D\u7B49\u8BCD\u8868\u8FBE\uFF09\u3002
+- \u4E0D\u662F\u7ED3\u6784\u56FE\uFF08\u88C5\u9970\u56FE\u3001\u7167\u7247\u3001logo\u3001\u7EAF\u6587\u5B57\u622A\u56FE\uFF09\u2192 \u8F93\u51FA {"type":"skip"}\u3002
+\u53EA\u63CF\u8FF0\u56FE\u4E2D\u53EF\u89C1\u5185\u5BB9\uFF0C\u4E0D\u5F97\u63A8\u6D4B\u6216\u7F16\u9020\u3002
+\u4E25\u683C\u8F93\u51FA JSON\uFF1A{"type":"structure|skip","image_type":"\u67B6\u6784\u56FE/\u6D41\u7A0B\u56FE/\u2026","description":"\u7ED3\u6784\u5316\u63CF\u8FF0\uFF0C\u4F7F\u7528 - \u5217\u8868\u4FDD\u7559\u5C42\u7EA7"}`;
+async function callDoubaoVision(pngBuffer, caption, cfg) {
+  const imageB64 = pngBuffer.toString("base64");
+  const captionLine = caption ? `\uFF08\u56FE\u9898/\u76F8\u5173\u6587\u5B57\uFF1A${caption}\uFF09` : "";
+  const res = await fetch(apiUrl(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${cfg.apiKey}`
+    },
+    body: JSON.stringify({
+      model: cfg.model,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: `data:image/jpeg;base64,${imageB64}` } },
+            { type: "text", text: `${VLM_PROMPT}${captionLine}` }
+          ]
+        }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0
+    }),
+    signal: AbortSignal.timeout(cfg.timeoutMs)
+  });
+  if (!res.ok) {
+    throw new Error(`\u8C46\u5305\u89C6\u89C9\u8BF7\u6C42\u5931\u8D25\uFF1AHTTP ${res.status} ${(await res.text()).slice(0, 200)}`);
+  }
+  const data = await res.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error("\u8C46\u5305\u89C6\u89C9\u8FD4\u56DE\u4E3A\u7A7A");
+  const cleaned = content.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+  return JSON.parse(cleaned);
+}
+var RENDER_ZOOM = 2;
+var MAX_IMAGE_SIDE = 2048;
+async function renderPagePng(pdfBuffer, pageIndex) {
+  const { Document: Document3, Matrix, ColorSpace } = await import("mupdf");
+  const doc = Document3.openDocument(pdfBuffer, "application/pdf");
+  try {
+    const page = doc.loadPage(pageIndex);
+    const pix = page.toPixmap(Matrix.scale(RENDER_ZOOM, RENDER_ZOOM), ColorSpace.DeviceRGB, false);
+    return Buffer.from(pix.asPNG());
+  } finally {
+    doc.destroy?.();
+  }
+}
+function bboxToPixels(bbox, pageWidthPx, pageHeightPx) {
+  const x0 = Math.max(0, Math.round(bbox.x0 * RENDER_ZOOM));
+  const x1 = Math.min(pageWidthPx, Math.round(bbox.x1 * RENDER_ZOOM));
+  const y0 = Math.max(0, Math.round(bbox.y0 * RENDER_ZOOM));
+  const y1 = Math.min(pageHeightPx, Math.round(bbox.y1 * RENDER_ZOOM));
+  return { left: x0, top: y0, width: Math.max(1, x1 - x0), height: Math.max(1, y1 - y0) };
+}
+async function cropAndCompress(pagePng, bbox) {
+  const meta = await sharp(pagePng).metadata();
+  const region = bboxToPixels(bbox, meta.width ?? 1, meta.height ?? 1);
+  return sharp(pagePng).extract({ left: region.left, top: region.top, width: region.width, height: region.height }).resize({ width: MAX_IMAGE_SIDE, height: MAX_IMAGE_SIDE, fit: "inside", withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer();
+}
+async function semanticizePdfFigures(pdfBuffer, figures) {
+  if (figures.length === 0) return [];
+  const cfg = getConfig();
+  if (!isImageSemanticEnabled()) return [];
+  const limited = figures.slice(0, cfg.maxImages);
+  if (limited.length < figures.length) {
+    console.warn(`[image-semantic] \u56FE\u7247\u6570\u91CF ${figures.length} \u8D85\u8FC7\u4E0A\u9650 ${cfg.maxImages}\uFF0C\u8D85\u51FA\u90E8\u5206\u8DF3\u8FC7`);
+  }
+  const results = [];
+  let cursor = 0;
+  const pagePngCache = /* @__PURE__ */ new Map();
+  async function worker() {
+    while (cursor < limited.length) {
+      const fig = limited[cursor++];
+      try {
+        let pagePng = pagePngCache.get(fig.page);
+        if (!pagePng) {
+          pagePng = await renderPagePng(pdfBuffer, fig.page - 1);
+          pagePngCache.set(fig.page, pagePng);
+        }
+        const jpeg = await cropAndCompress(pagePng, fig.bbox);
+        const parsed = await callDoubaoVision(jpeg, fig.caption, cfg);
+        const type = (parsed.type ?? "").toLowerCase();
+        if (type === "structure") {
+          results.push({
+            page: fig.page,
+            caption: fig.caption,
+            imageType: parsed.image_type,
+            description: parsed.description ?? "",
+            skipped: false
+          });
+        } else {
+          results.push({ page: fig.page, caption: fig.caption, skipped: true });
+        }
+      } catch (err) {
+        console.warn(
+          `[image-semantic] \u7B2C ${fig.page} \u9875\u56FE\u7247\u8BED\u4E49\u5316\u5931\u8D25\uFF08\u5DF2\u8DF3\u8FC7\uFF09\uFF1A${err instanceof Error ? err.message : String(err)}`
+        );
+        results.push({ page: fig.page, caption: fig.caption, skipped: true });
+      }
+    }
+  }
+  const workers = Array.from({ length: Math.min(cfg.concurrency, limited.length) }, () => worker());
+  await Promise.all(workers);
+  return results;
 }
 
 // src/loaders/pdf/loader.ts
@@ -965,15 +877,181 @@ async function extractLocalPageTexts(filePath) {
     await parser.destroy();
   }
 }
+function markLocalTables(pageText) {
+  const lines = pageText.split("\n");
+  const out = [];
+  let table = [];
+  const flushTable = () => {
+    if (table.length >= 2) {
+      const rows = table.map((l) => l.split("	").map((c) => c.trim()));
+      const colCount = Math.max(...rows.map((r) => r.length));
+      const fmt = (r) => "| " + Array.from({ length: colCount }, (_, i) => r[i] ?? "").join(" | ") + " |";
+      out.push("[\u8868\u683C]");
+      out.push(fmt(rows[0]));
+      out.push("| " + Array.from({ length: colCount }, () => "---").join(" | ") + " |");
+      for (const r of rows.slice(1)) out.push(fmt(r));
+    } else {
+      for (const l of table) out.push(l);
+    }
+    table = [];
+  };
+  for (const line of lines) {
+    if (line.includes("	")) {
+      table.push(line);
+    } else {
+      flushTable();
+      out.push(line);
+    }
+  }
+  flushTable();
+  return out.join("\n");
+}
+function normalizeHeadings(text) {
+  return text.split("\n").map((line) => {
+    const t = line.trim();
+    if (!t) return line;
+    const isMdHeading = /^#+\s+/.test(t);
+    const body = isMdHeading ? t.replace(/^#+\s+/, "") : t;
+    if (/^(\||\[表格\]|[-•*]\s)/.test(body)) return line;
+    if (/^[（(]\s*\d+\s*[)）]/.test(body)) return line;
+    const looksLikeHeadingText = (s2) => s2.length <= 25 && !/[。！？]$/.test(s2) && !/[,，；;：]/.test(s2);
+    let m = body.match(/^(\d+\.\d+)[.、]?\s*(.+)$/);
+    if (m && looksLikeHeadingText(m[2])) return `#### ${m[2]}`;
+    m = body.match(/^(\d+)[.、]\s*(.+)$/);
+    if (m && looksLikeHeadingText(m[2])) return `### ${m[2]}`;
+    m = body.match(/^([一二三四五六七八九十百]+)、\s*(.+)$/);
+    if (m && looksLikeHeadingText(m[2])) return `## ${m[2]}`;
+    return line;
+  }).join("\n");
+}
+function reflowBrokenLines(text) {
+  text = text.replace(/\r\n?/g, "\n");
+  const lines = text.split("\n");
+  const out = [];
+  const protectedLine = /^\s*(#+\s|[-•*]\s|\||\[表格\])/;
+  const headingLine = /^\s*([一二三四五六七八九十百]+、|\d+[.、])/;
+  for (let i = 0; i < lines.length; i++) {
+    const prev = lines[i].trimEnd();
+    const nextRaw = lines[i + 1];
+    if (!nextRaw || nextRaw.trim() === "" || protectedLine.test(prev) || protectedLine.test(nextRaw) || headingLine.test(prev) || headingLine.test(nextRaw)) {
+      out.push(lines[i]);
+      continue;
+    }
+    const next = nextRaw.trimStart();
+    const prevEnd = prev.slice(-1);
+    const nextStart = next.slice(0, 1);
+    if (prevEnd === "-" && /^[a-zA-Z]/.test(nextStart)) {
+      out.push(prev.slice(0, -1) + next);
+      i++;
+      continue;
+    }
+    if (/^[。！？；：，、」』））》]/.test(nextStart)) {
+      out.push(prev + next);
+      i++;
+      continue;
+    }
+    const isSentenceEnd = /[。！？；]$/.test(prevEnd);
+    const prevIsText = /[a-zA-Z\u4e00-\u9fa5」』））》：，、]$/.test(prevEnd);
+    const nextIsText = /^[a-zA-Z\u4e00-\u9fa5(（《"“]/.test(nextStart);
+    if (!isSentenceEnd && prevIsText && nextIsText) {
+      out.push(prev + next);
+      i++;
+      continue;
+    }
+    out.push(lines[i]);
+  }
+  return out.join("\n");
+}
+function isPageNumberLine(line) {
+  const t = line.trim();
+  if (!t || t.length > 12) return false;
+  return /^(第\s*[0-9一二三四五六七八九十百]+\s*页|Page\s*\d+|[-—–]\s*\d+\s*[-—–]|\d{1,4})$/i.test(t);
+}
+function cleanFallbackPageTexts(pageTexts) {
+  if (pageTexts.length < 2) {
+    return pageTexts.map((t) => t.split("\n").filter((l) => !isPageNumberLine(l)).join("\n"));
+  }
+  const lineCount = /* @__PURE__ */ new Map();
+  for (const page of pageTexts) {
+    const seen = /* @__PURE__ */ new Set();
+    for (const line of page.split("\n")) {
+      const k = line.trim();
+      if (k && !seen.has(k)) {
+        seen.add(k);
+        lineCount.set(k, (lineCount.get(k) ?? 0) + 1);
+      }
+    }
+  }
+  const repeated = new Set([...lineCount].filter(([, n]) => n >= 2).map(([k]) => k));
+  return pageTexts.map((page) => {
+    const lines = page.split("\n");
+    const keep = [];
+    for (let i = 0; i < lines.length; i++) {
+      const k = lines[i].trim();
+      const atEdge = i <= 2 || i >= lines.length - 3;
+      if (atEdge && repeated.has(k)) continue;
+      if (atEdge && isPageNumberLine(k)) continue;
+      keep.push(lines[i]);
+    }
+    return keep.join("\n");
+  });
+}
 async function applyUnstructuredToTextPages(filePath, buffer, localPages, scanPageNums) {
   const pageTexts = localPages.slice();
   const scanPageSet = new Set(scanPageNums);
+  let images = { total: 0, semanticized: 0, skipped: 0 };
   try {
     const elements = await parsePdfWithUnstructured(buffer, {
       strategy: "hi_res",
       languages: ["chi_sim"]
     });
     const structured = elementsToPageTexts(elements, localPages.length);
+    if (isImageSemanticEnabled()) {
+      try {
+        const figurePages = /* @__PURE__ */ new Set();
+        const captionsByPage = /* @__PURE__ */ new Map();
+        for (const el of elements) {
+          const elType = el.type ?? "";
+          const figText = (el.text ?? "").trim();
+          const p = el.metadata?.page_number ?? 1;
+          if (elType === "Image" || elType === "Figure") {
+            figurePages.add(p);
+            if (figText) captionsByPage.set(p, [...captionsByPage.get(p) ?? [], figText]);
+          } else if (elType === "FigureCaption" && figText) {
+            captionsByPage.set(p, [figText, ...captionsByPage.get(p) ?? []]);
+          }
+        }
+        const figures = await detectPdfImageBlocks(buffer, figurePages);
+        if (figures.length > 0) {
+          for (const f of figures) {
+            const caps = captionsByPage.get(f.page);
+            if (caps?.length) f.caption = caps.join(" / ");
+          }
+          const results = await semanticizePdfFigures(buffer, figures);
+          images = { total: figures.length, semanticized: 0, skipped: 0 };
+          for (const r of results) {
+            if (r.skipped) {
+              images.skipped++;
+              continue;
+            }
+            if (scanPageSet.has(r.page)) continue;
+            images.semanticized++;
+            const caption = r.caption ? `\uFF1A${r.caption}` : "";
+            const block = `[\u56FE\u7247]${r.imageType ? ` ${r.imageType}` : ""}${caption}
+${r.description}`.trim();
+            if (!block) continue;
+            const pageIdx = r.page - 1;
+            structured[pageIdx] = structured[pageIdx] ? `${structured[pageIdx]}
+
+${block}` : block;
+          }
+        }
+      } catch (err) {
+        console.warn(
+          `[loadPdf] \u56FE\u7247\u8BED\u4E49\u5316\u6574\u4F53\u5931\u8D25\uFF08\u5DF2\u5FFD\u7565\uFF09\uFF1A${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+    }
     structured.forEach((text, i) => {
       if (!scanPageSet.has(i + 1)) pageTexts[i] = text;
     });
@@ -981,8 +1059,16 @@ async function applyUnstructuredToTextPages(filePath, buffer, localPages, scanPa
     console.warn(
       `[loadPdf] Unstructured \u7248\u9762\u5206\u6790\u5931\u8D25\uFF0C\u6587\u672C\u5C42\u9875\u56DE\u9000\u672C\u5730\u63D0\u53D6\uFF1A${err instanceof Error ? err.message : String(err)}`
     );
+    for (let i = 0; i < pageTexts.length; i++) {
+      if (!scanPageSet.has(i + 1)) {
+        pageTexts[i] = markLocalTables(pageTexts[i]);
+        pageTexts[i] = reflowBrokenLines(pageTexts[i]);
+      }
+    }
+    const cleaned = cleanFallbackPageTexts(pageTexts);
+    cleaned.forEach((t, i) => pageTexts[i] = t);
   }
-  return pageTexts;
+  return { pageTexts, images };
 }
 async function routeWholeOcr(filePath, buffer, options) {
   if (buffer.byteLength > PDF_DIRECT_LIMIT_BYTES) {
@@ -1013,9 +1099,9 @@ async function loadPdf(filePath, options) {
   localPages.forEach((text, i) => {
     if (needOcrPage(text)) scanPageNums.push(i + 1);
   });
-  const pageTexts = await applyUnstructuredToTextPages(filePath, buffer, localPages, scanPageNums);
+  const { pageTexts, images } = await applyUnstructuredToTextPages(filePath, buffer, localPages, scanPageNums);
   if (scanPageNums.length === 0) {
-    return buildDocument(filePath, pageTexts, { pages: localPages.length, ocrPages: 0, options });
+    return buildDocument(filePath, pageTexts, { pages: localPages.length, ocrPages: 0, images, options });
   }
   if (buffer.byteLength > PDF_DIRECT_LIMIT_BYTES) {
     throwOversizeError("\u5305\u542B\u65E0\u6587\u672C\u5C42\u9875\u9762");
@@ -1023,12 +1109,18 @@ async function loadPdf(filePath, options) {
   for (const page of scanPageNums) {
     pageTexts[page - 1] = pageToText(await ocrPdfPage(buffer, page));
   }
-  return buildDocument(filePath, pageTexts, { pages: localPages.length, ocrPages: scanPageNums.length, options });
+  return buildDocument(filePath, pageTexts, {
+    pages: localPages.length,
+    ocrPages: scanPageNums.length,
+    images,
+    options
+  });
 }
 function buildDocument(filePath, pageTexts, info) {
-  const { pages, ocrPages, options } = info;
+  const { pages, ocrPages, images, options } = info;
   const mode = ocrPages === 0 ? "text-layer" : ocrPages === pages ? "baidu-doc-analysis" : "mixed";
-  const content = pageTexts.map((text, i) => pages > 1 ? `===== \u7B2C ${i + 1} \u9875 =====
+  const normalizedPages = pageTexts.map((t) => normalizeHeadings(t));
+  const content = normalizedPages.map((text, i) => pages > 1 ? `===== \u7B2C ${i + 1} \u9875 =====
 ${text}` : text).filter((t) => t.trim().length > 0).join("\n\n");
   return [
     {
@@ -1038,6 +1130,8 @@ ${text}` : text).filter((t) => t.trim().length > 0).join("\n\n");
         mode,
         pages,
         ocrPages,
+        images,
+        // 图片语义化统计：{total, semanticized, skipped}；未启用时为 {0,0,0}
         splitPages: options?.splitPages ?? false
       }
     }
@@ -1046,11 +1140,11 @@ ${text}` : text).filter((t) => t.trim().length > 0).join("\n\n");
 
 // src/loaders/markdown/loader.ts
 import { readFileSync as readFileSync2 } from "fs";
-import { Document as Document2 } from "@langchain/core/documents";
+import { Document } from "@langchain/core/documents";
 async function loadMarkdown(filePath) {
   const content = readFileSync2(filePath, "utf-8");
   return [
-    new Document2({
+    new Document({
       pageContent: content,
       metadata: { source: filePath }
     })
@@ -1058,28 +1152,540 @@ async function loadMarkdown(filePath) {
 }
 
 // src/loaders/extract.ts
+function normalizeParsedText(content, isFirstPage) {
+  let text = content.replace(/\r\n/g, "\n");
+  if (isFirstPage) text = text.replace(/^\uFEFF/, "");
+  return text;
+}
 async function parseDocument(filePath) {
   const fileType = filePath.split(".").pop()?.toLowerCase() ?? "";
+  let docs;
   switch (fileType) {
     case "pdf":
-      return { fileType, docs: await loadPdf(filePath, { splitPages: false }) };
+      docs = await loadPdf(filePath, { splitPages: false });
+      break;
     case "md":
-      return { fileType, docs: await loadMarkdown(filePath) };
+      docs = await loadMarkdown(filePath);
+      break;
     default:
       throw new Error(`\u6682\u4E0D\u652F\u6301\u7684\u6587\u4EF6\u7C7B\u578B\uFF1A.${fileType}\uFF08\u5F53\u524D\u652F\u6301 pdf / md\uFF09`);
   }
+  docs.forEach((doc, i) => {
+    doc.pageContent = normalizeParsedText(doc.pageContent, i === 0);
+  });
+  return { fileType, docs };
 }
+
+// src/rag/rag.service.ts
+var RRF_K = 60;
+var RagService = class {
+  vectorStore = null;
+  embeddings;
+  constructor(embeddings) {
+    this.embeddings = embeddings ?? defaultEmbeddings;
+  }
+  /** 初始化 PGVectorStore（延迟初始化，避免模块加载时立即连接 DB） */
+  async getStore() {
+    if (this.vectorStore) return this.vectorStore;
+    const config = {
+      postgresConnectionOptions: {
+        connectionString: process.env.DATABASE_URL
+      },
+      tableName: RAG_TABLE_NAME,
+      columns: {
+        idColumnName: "id",
+        contentColumnName: "content",
+        metadataColumnName: "metadata",
+        vectorColumnName: "embedding"
+      },
+      distanceStrategy: "cosine",
+      scoreNormalization: "similarity"
+    };
+    this.vectorStore = await PGVectorStore.initialize(this.embeddings, {
+      ...config,
+      dimensions: RAG_EMBEDDING_DIMENSIONS
+    });
+    lexicalIndex.attach(this.vectorStore.pool);
+    return this.vectorStore;
+  }
+  /**
+   * 索引文档：切片 + 向量化，返回切片数据供后端写 DB
+   *
+   * @param kbId 知识库 ID
+   * @param documentId 文档 ID
+   * @param content 文档全文
+   * @param names 知识库名称 / 文档文件名（存入 vector metadata，检索时直接返回）
+   * @param taskId 可选：外层任务已存在时复用其 taskId（跳过 started/completed 生命周期，
+   *               只发 progress），避免「上传」外层任务与「索引」内层任务嵌套成两个 taskId、
+   *               前端按第一个锚定后丢掉内层事件
+   * @param stepOffset 步骤起始编号（外层任务已用掉 step1/2 时从 3 开始）
+   * @returns 切片列表（含序号和 token 估算）
+   */
+  async indexDocument(kbId, documentId, content, names, taskId, stepOffset = 1) {
+    if (taskId) {
+      return this.vectorize(kbId, documentId, content, names, taskId, stepOffset);
+    }
+    return withTaskEvents(
+      "document_index" /* DOCUMENT_INDEX */,
+      { kbId, documentId, message: `\u7D22\u5F15\u6587\u6863 #${documentId}` },
+      (tid) => this.vectorize(kbId, documentId, content, names, tid, stepOffset)
+    );
+  }
+  /**
+   * 重建索引（编辑保存专用）：删除旧向量 → 内容就绪 → 数据清洗 → 重新切片 → 重新向量化
+   *
+   * 事件序列与前端 5 步条（重建索引/数据清洗/切片/向量化/完成）一一对应：
+   *   step(offset)     重建索引：删除旧向量
+   *   step(offset+1)   数据清洗完成（CRLF / BOM 归一）
+   *   step(offset+2)   切片完成（vectorize 发出）
+   *   step(offset+3)   向量化完成（vectorize 发出）
+   *
+   * 编辑内容来自编辑器（非文件），无需「解析」步骤；与新建链路（createDocument）
+   * 保持同一套步骤语义（数据清洗/切片/向量化/完成），仅多出「重建索引」第一步；
+   * 编辑内容同样走 normalizeParsedText 统一清洗，保证进入切片前的格式一致。
+   */
+  async reindexDocument(documentId, kbId, content, names, taskId, stepOffset = 1) {
+    const cleaned = normalizeParsedText(content, true);
+    if (taskId) {
+      await this.deleteByDocumentId(documentId);
+      emit(TaskEvent.PROGRESS, { taskId, taskType: "document_index" /* DOCUMENT_INDEX */, step: stepOffset, message: "\u91CD\u5EFA\u7D22\u5F15\uFF1A\u5220\u9664\u65E7\u5411\u91CF" });
+      emit(TaskEvent.PROGRESS, { taskId, taskType: "document_index" /* DOCUMENT_INDEX */, step: stepOffset + 1, message: "\u6570\u636E\u6E05\u6D17\u5B8C\u6210\uFF08CRLF / BOM \u5F52\u4E00\uFF09\uFF0C\u5F00\u59CB\u5207\u7247\u4E0E\u5411\u91CF\u5316" });
+      return this.vectorize(kbId, documentId, cleaned, names, taskId, stepOffset + 2);
+    }
+    return withTaskEvents("document_index" /* DOCUMENT_INDEX */, { kbId, documentId, message: `\u91CD\u5EFA\u7D22\u5F15\u6587\u6863 #${documentId}` }, async (tid) => {
+      await this.deleteByDocumentId(documentId);
+      emit(TaskEvent.PROGRESS, { taskId: tid, taskType: "document_index" /* DOCUMENT_INDEX */, step: 1, message: "\u91CD\u5EFA\u7D22\u5F15\uFF1A\u5220\u9664\u65E7\u5411\u91CF" });
+      emit(TaskEvent.PROGRESS, { taskId: tid, taskType: "document_index" /* DOCUMENT_INDEX */, step: 2, message: "\u6570\u636E\u6E05\u6D17\u5B8C\u6210\uFF08CRLF / BOM \u5F52\u4E00\uFF09\uFF0C\u5F00\u59CB\u5207\u7247\u4E0E\u5411\u91CF\u5316" });
+      return this.vectorize(kbId, documentId, cleaned, names, tid, 3);
+    });
+  }
+  /**
+   * 切片 + 向量化核心逻辑（不发 started/completed，由 withTaskEvents 统一发）
+   *
+   * @param taskId 任务 ID（用于发进度事件）
+   * @param stepOffset 步骤偏移（重建索引时前面多了"删旧向量"一步）
+   */
+  async vectorize(kbId, documentId, content, names, taskId, stepOffset = 1) {
+    const texts = await splitTextToChunks(content, { preserveTables: true });
+    if (texts.length === 0) return [];
+    emit(TaskEvent.PROGRESS, { taskId, taskType: "document_index" /* DOCUMENT_INDEX */, step: stepOffset, message: `\u5207\u7247\u5B8C\u6210\uFF08${texts.length} \u7247\uFF09\uFF0C\u5F00\u59CB\u5411\u91CF\u5316` });
+    const store = await this.getStore();
+    const docs = texts.map(
+      (text, i) => new Document2({
+        pageContent: text,
+        metadata: {
+          documentId,
+          kbId,
+          chunkIndex: i + 1,
+          kbName: names?.kbName,
+          documentName: names?.documentName
+        }
+      })
+    );
+    await store.addDocuments(docs);
+    await lexicalIndex.addChunks(
+      kbId,
+      documentId,
+      { kbName: names?.kbName, documentName: names?.documentName },
+      texts.map((text, i) => ({ content: text, index: i + 1 }))
+    );
+    emit(TaskEvent.PROGRESS, { taskId, taskType: "document_index" /* DOCUMENT_INDEX */, step: stepOffset + 1, message: "\u5411\u91CF\u5316\u5B8C\u6210" });
+    return texts.map((text, i) => ({
+      content: text,
+      index: i + 1,
+      tokenCount: Math.ceil(text.length / 2)
+    }));
+  }
+  /**
+   * 检索（默认混合模式）
+   *
+   * - semantic：向量余弦相似度，长于语义近似（"如何请假" 能命中 "休假申请流程"）
+   * - keyword：BM25 词法匹配，长于精确词（型号、错误码、人名等专有名词）
+   * - hybrid：两路各取候选，用 RRF 融合排名 —— rank 求和不用原始分，
+   *   天然规避"余弦分 0~1 与 BM25 分无上界"不可比的问题
+   *
+   * @param query 用户问题
+   * @param options.kbIds 限制在指定知识库
+   * @param options.k top-K
+   * @param options.mode 检索模式，默认 hybrid
+   */
+  async search(query, options = {}) {
+    const { kbIds, k = 5, mode = "hybrid" } = options;
+    const fetchK = Math.max(k * 2, 10);
+    return withTaskEvents("rag_search" /* RAG_SEARCH */, { kbIds, message: `\u68C0\u7D22\uFF1A${query.slice(0, 50)}` }, async () => {
+      await this.getStore();
+      const lists = [];
+      if (mode !== "keyword") lists.push(await this.semanticSearch(query, kbIds, fetchK));
+      if (mode !== "semantic") lists.push(await lexicalIndex.search(query, { kbIds, k: fetchK }));
+      if (mode !== "hybrid") return lists[0].slice(0, k);
+      return fuseRrf(lists, k);
+    });
+  }
+  /** 向量相似度检索 */
+  async semanticSearch(query, kbIds, k) {
+    const store = await this.getStore();
+    const filter = kbIds && kbIds.length > 0 ? { kbId: { in: kbIds } } : void 0;
+    const results = await store.similaritySearchWithScore(query, k, filter);
+    return results.map(([doc, score]) => {
+      const metadata = doc.metadata;
+      return {
+        content: doc.pageContent,
+        documentId: metadata.documentId,
+        kbId: metadata.kbId,
+        kbName: metadata.kbName,
+        documentName: metadata.documentName,
+        chunkIndex: metadata.chunkIndex,
+        score,
+        matchType: "semantic"
+      };
+    });
+  }
+  /**
+   * 删除某个文档的所有索引（向量 + BM25 词法）
+   *
+   * PGVectorStore 通过 metadata 过滤删除
+   */
+  async deleteByDocumentId(documentId) {
+    const store = await this.getStore();
+    await store.delete({ filter: { documentId } });
+    await lexicalIndex.deleteByDocumentId(documentId);
+  }
+};
+function fuseRrf(lists, k) {
+  const fused = /* @__PURE__ */ new Map();
+  for (const list of lists) {
+    list.forEach((result, rank) => {
+      const key = `${result.documentId}#${result.chunkIndex ?? -1}`;
+      const entry = fused.get(key) ?? { result, rrf: 0, matched: /* @__PURE__ */ new Set() };
+      entry.rrf += 1 / (RRF_K + rank + 1);
+      entry.matched.add(result.matchType);
+      fused.set(key, entry);
+    });
+  }
+  const maxRrf = lists.length / (RRF_K + 1);
+  return [...fused.values()].sort((a, b) => b.rrf - a.rrf).slice(0, k).map(({ result, rrf, matched }) => ({
+    ...result,
+    score: rrf / maxRrf,
+    matchType: matched.size > 1 ? "both" : [...matched][0]
+  }));
+}
+function extractTableBlocks(text) {
+  const lines = text.split("\n");
+  const tableBlocks = [];
+  const textBlocks = [];
+  let current = [];
+  let table = [];
+  let inTable = false;
+  const flushText = () => {
+    if (current.length) {
+      textBlocks.push(current.join("\n"));
+      current = [];
+    }
+  };
+  const flushTable = () => {
+    if (table.length) {
+      tableBlocks.push(table.join("\n"));
+      table = [];
+    }
+  };
+  for (const line of lines) {
+    if (inTable) {
+      if (/^\|/.test(line)) {
+        table.push(line);
+        continue;
+      }
+      flushTable();
+      inTable = false;
+    }
+    if (/^\[表格\]\s*$/.test(line.trim())) {
+      flushText();
+      inTable = true;
+      table = [line];
+      continue;
+    }
+    current.push(line);
+  }
+  if (inTable) flushTable();
+  flushText();
+  return { tableBlocks, textBlocks };
+}
+async function splitTextToChunks(text, options) {
+  if (options?.preserveTables) {
+    const { tableBlocks, textBlocks } = extractTableBlocks(text);
+    const chunks = [...tableBlocks];
+    for (const block of textBlocks) {
+      chunks.push(...await splitTextInternal(block));
+    }
+    return chunks.filter(Boolean);
+  }
+  return splitTextInternal(text);
+}
+async function splitTextInternal(text) {
+  const splitter = new RecursiveCharacterTextSplitter({
+    // 中文场景 500 字符 ≈ 250 token 偏大，检索命中粒度粗；
+    // 350 字符 ≈ 175 token，更适合 QA 式问答，切片数略增但向量化成本可接受
+    chunkSize: 350,
+    chunkOverlap: 40,
+    separators: ["\n\n", "\n", "\u3002", "\uFF01", "\uFF1F", "\uFF1B", "\uFF0C", " ", ""]
+  });
+  const docs = await splitter.createDocuments([text]);
+  return docs.map((d) => d.pageContent).filter(Boolean);
+}
+var ragService = new RagService();
+
+// src/tools/knowledge-search.ts
+function chunkKey(r) {
+  return `${r.kbId}:${r.documentId}:${r.chunkIndex ?? ""}:${r.content}`;
+}
+function appendScopedResults(scope, results) {
+  if (!scope) return;
+  const seen = new Set(scope.results.map(chunkKey));
+  for (const r of results) {
+    const key = chunkKey(r);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    scope.results.push(r);
+  }
+}
+function isRetrievalScope(value) {
+  return typeof value === "object" && value !== null && "results" in value && Array.isArray(value.results);
+}
+function readRetrievalScope(config) {
+  const raw = config?.configurable?.retrieval;
+  return isRetrievalScope(raw) ? raw : void 0;
+}
+function readScopedKbIds(config) {
+  const raw = config?.configurable?.kbIds;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((value) => typeof value === "number");
+}
+var MATCH_LABELS = {
+  both: "\u8BED\u4E49+\u5173\u952E\u8BCD",
+  semantic: "\u8BED\u4E49",
+  keyword: "\u5173\u952E\u8BCD"
+};
+var knowledgeSearchTool = tool(
+  async ({ query }, config) => {
+    const kbIds = readScopedKbIds(config);
+    if (kbIds.length === 0) {
+      return "\u5F53\u524D\u4F1A\u8BDD\u672A\u6307\u5B9A\u77E5\u8BC6\u5E93\uFF0C\u65E0\u6CD5\u68C0\u7D22\u3002\u8BF7\u63D0\u793A\u7528\u6237\u5148\u9009\u62E9\u8981\u67E5\u8BE2\u7684\u77E5\u8BC6\u5E93\u3002";
+    }
+    const results = await ragService.search(query, { kbIds, k: 5 });
+    appendScopedResults(readRetrievalScope(config), results);
+    if (results.length === 0) {
+      return "\u672A\u627E\u5230\u76F8\u5173\u6587\u6863\u3002\u8BF7\u544A\u77E5\u7528\u6237\u5F53\u524D\u77E5\u8BC6\u5E93\u4E2D\u6CA1\u6709\u5339\u914D\u7684\u4FE1\u606F\u3002";
+    }
+    return results.map(
+      (r, i) => `[\u6587\u6863\u7247\u6BB5 ${i + 1}] \u6765\u6E90: ${r.kbName ?? `\u77E5\u8BC6\u5E93#${r.kbId}`}${r.documentName ? `/${r.documentName}` : ""} (\u5339\u914D: ${MATCH_LABELS[r.matchType] ?? r.matchType}, \u5F97\u5206: ${(r.score * 100).toFixed(1)}%)
+${r.content}`
+    ).join("\n\n");
+  },
+  {
+    name: "search_knowledge_base",
+    description: `\u5728\u672C\u6B21\u4F1A\u8BDD\u6307\u5B9A\u7684\u77E5\u8BC6\u5E93\u4E2D\u68C0\u7D22\u76F8\u5173\u6587\u6863\u5185\u5BB9\uFF08\u5411\u91CF\u8BED\u4E49 + BM25 \u5173\u952E\u8BCD\u6DF7\u5408\u68C0\u7D22\uFF09\u3002
+\u9002\u7528\u573A\u666F\uFF1A
+- \u7528\u6237\u8BE2\u95EE\u516C\u53F8\u653F\u7B56\u3001\u6D41\u7A0B\u3001\u89C4\u8303\u3001\u4EA7\u54C1\u6587\u6863\u7B49\u5185\u90E8\u8D44\u6599
+- \u9700\u8981\u67E5\u627E\u7279\u5B9A\u4E1A\u52A1\u77E5\u8BC6\u6216\u64CD\u4F5C\u6307\u5357
+- \u7528\u6237\u7684\u95EE\u9898\u9700\u8981\u57FA\u4E8E\u516C\u53F8\u6587\u6863\u6216\u4EA7\u54C1\u8BF4\u660E\u4E66\u6765\u56DE\u7B54
+
+\u6CE8\u610F\uFF1A
+- \u68C0\u7D22\u8303\u56F4\u7531\u4F1A\u8BDD\u8BBE\u5B9A\uFF1A\u4F60\u53EA\u80FD\u51B3\u5B9A\u300C\u67E5\u4EC0\u4E48\u300D\uFF0C\u65E0\u6CD5\u6539\u53D8\u300C\u80FD\u67E5\u54EA\u4E9B\u5E93\u300D\u3002\u672A\u6307\u5B9A\u77E5\u8BC6\u5E93\u65F6\u5DE5\u5177\u4F1A\u76F4\u63A5\u8FD4\u56DE\u63D0\u793A\u3002
+- \u68C0\u7D22\u7ED3\u679C\u6309\u6DF7\u5408\u76F8\u5173\u6027\u6392\u5E8F\uFF0C\u53EF\u80FD\u4E0D\u5B8C\u5168\u7CBE\u786E\u3002
+- \u4E00\u6B21\u4E0D\u7406\u60F3\u65F6\u6539\u5199\u67E5\u8BE2\u8BCD\uFF08\u8BBE\u5907\u578B\u53F7\u3001\u6545\u969C\u7801\u3001\u529F\u80FD\u5173\u952E\u8BCD\uFF09\u518D\u8BD5\uFF0C\u6700\u591A\u91CD\u8BD5\u4E24\u6B21\u3002
+- \u68C0\u7D22\u65E0\u7ED3\u679C\u65F6\u8BF7\u660E\u786E\u544A\u77E5\u7528\u6237\u77E5\u8BC6\u5E93\u4E2D\u6CA1\u6709\u76F8\u5173\u4FE1\u606F\uFF0C\u4E0D\u8981\u51ED\u8BB0\u5FC6\u8865\u5168\u3002`,
+    schema: z.object({
+      query: z.string().describe("\u68C0\u7D22\u67E5\u8BE2\u8BED\u53E5\uFF1B\u5EFA\u8BAE\u4F7F\u7528\u95EE\u9898\u4E2D\u7684\u5173\u952E\u8BCD\uFF0C\u9996\u6B21\u4E0D\u7406\u60F3\u65F6\u53EF\u6362\u7528\u578B\u53F7\u3001\u6545\u969C\u7801\u7B49\u529F\u80FD\u5173\u952E\u8BCD")
+    })
+  }
+);
+
+// src/libs/messages.ts
+import { HumanMessage, AIMessage, SystemMessage } from "@langchain/core/messages";
+function toLangChainMessages(messages) {
+  return messages.map((m) => {
+    switch (m.role) {
+      case "user":
+        return new HumanMessage(m.content);
+      case "assistant":
+        return new AIMessage(m.content);
+      case "system":
+        return new SystemMessage(m.content);
+    }
+  });
+}
+
+// src/agent/index.ts
+function readQuery(data) {
+  if (typeof data !== "object" || data === null || !("input" in data)) return "";
+  const wrapper = data.input;
+  if (typeof wrapper !== "object" || wrapper === null || !("input" in wrapper)) return "";
+  const serialized = wrapper.input;
+  if (typeof serialized !== "string") return "";
+  try {
+    const parsed = JSON.parse(serialized);
+    if (typeof parsed === "object" && parsed !== null && "query" in parsed && typeof parsed.query === "string") {
+      return parsed.query;
+    }
+  } catch {
+  }
+  return "";
+}
+function readToolOutput(output) {
+  if (typeof output === "string") return output;
+  if (typeof output === "object" && output !== null && "content" in output && typeof output.content === "string") {
+    return output.content;
+  }
+  return void 0;
+}
+var AiEngine = class _AiEngine {
+  /**
+   * Agent 全局单例
+   */
+  static agent = createAgent({
+    model: defaultModel,
+    tools: [knowledgeSearchTool],
+    systemPrompt
+  });
+  /** 获取 agent（需要切换模型时创建新实例） */
+  getAgent(modelName) {
+    const currentModel = defaultModel.model;
+    if (!modelName || modelName === currentModel) return _AiEngine.agent;
+    return createAgent({
+      model: createModel(modelName),
+      tools: [knowledgeSearchTool],
+      systemPrompt
+    });
+  }
+  /**
+   * 普通对话
+   */
+  async chat(input, options = {}) {
+    const messages = [...toLangChainMessages(options.history ?? []), new HumanMessage2(input)];
+    const res = await this.getAgent(options.model).invoke(
+      { messages },
+      { configurable: { kbIds: options.kbIds } }
+    );
+    const last = res.messages.at(-1);
+    return typeof last?.content === "string" ? last.content : JSON.stringify(last?.content);
+  }
+  /**
+   * 流式对话
+   */
+  async *stream(input, options = {}) {
+    const messages = [...toLangChainMessages(options.history ?? []), new HumanMessage2(input)];
+    const stream = await this.getAgent(options.model).stream(
+      { messages },
+      { streamMode: "messages", configurable: { kbIds: options.kbIds } }
+    );
+    for await (const [chunk] of stream) {
+      if (typeof chunk.content === "string") {
+        yield chunk.content;
+      }
+    }
+  }
+  /**
+   * 流式对话 + 观察整个执行过程（token + tool + chain）
+   *
+   * 流式是 AsyncGenerator，包不进 withTaskEvents，手动发三段生命周期事件：
+   * started → （逐 token 流式）→ completed / failed。
+   * 工具调用的明细不再单独 emit——前端经 SSE 的 tool_start/tool_end 已能看到。
+   *
+   * 检索完全交给 agent：这里不做预检索，由模型自行决定是否调用检索工具。
+   * 检索作用域（kbIds）与结果归属都经 `configurable` 下传给工具，
+   * 结果写在每次调用新建的 `retrieval` 对象上——不用模块级变量，并发会话不会互相污染。
+   */
+  async *streamEvents(input, options = {}) {
+    const taskId = newTaskId("chat" /* CHAT */);
+    const startedAt = Date.now();
+    emit(TaskEvent.STARTED, { taskId, taskType: "chat" /* CHAT */, message: `\u5BF9\u8BDD\uFF1A${input.slice(0, 50)}` });
+    const retrieval = { results: [] };
+    try {
+      const messages = [...toLangChainMessages(options.history ?? []), new HumanMessage2(input)];
+      const stream = await this.getAgent(options.model).streamEvents(
+        { messages },
+        { version: "v2", configurable: { kbIds: options.kbIds, retrieval } }
+      );
+      for await (const event of stream) {
+        switch (event.event) {
+          case "on_chat_model_stream": {
+            const chunk = event.data.chunk;
+            const reasoning = chunk.additional_kwargs?.reasoning || chunk.additional_kwargs?.reasoning_content;
+            if (typeof reasoning === "string" && reasoning) {
+              yield { type: "reasoning", content: reasoning };
+            }
+            if (typeof chunk.content === "string" && chunk.content) {
+              yield { type: "token", content: chunk.content };
+            }
+            break;
+          }
+          // 知识库检索工具 → 专用事件，前端可展示检索状态 + 知识库名称
+          case "on_tool_start":
+            if (event.name === "search_knowledge_base") {
+              yield { type: "knowledge_search", query: readQuery(event.data), kbIds: options.kbIds };
+            } else {
+              yield { type: "tool_start", name: event.name };
+            }
+            break;
+          case "on_tool_end":
+            if (event.name === "search_knowledge_base") {
+              const docs = retrieval.results;
+              const kbNames = [...new Set(docs.map((r) => r.kbName).filter((name) => typeof name === "string"))];
+              yield {
+                type: "knowledge_search",
+                query: "",
+                kbIds: options.kbIds,
+                kbNames,
+                results: readToolOutput(event.data.output),
+                docs
+              };
+            } else {
+              yield {
+                type: "tool_end",
+                name: event.name,
+                result: readToolOutput(event.data.output)
+              };
+            }
+            break;
+        }
+      }
+      emit(TaskEvent.COMPLETED, { taskId, taskType: "chat" /* CHAT */, durationMs: Date.now() - startedAt });
+    } catch (err) {
+      const e = err instanceof Error ? err : new Error(String(err));
+      emit(TaskEvent.FAILED, { taskId, taskType: "chat" /* CHAT */, durationMs: Date.now() - startedAt, error: e.message, stack: e.stack });
+      throw err;
+    }
+  }
+};
 export {
   AiEngine,
   BM25_PARAMS,
   LexicalIndexService,
   RagService,
+  TaskEvent,
+  TaskType,
+  cleanFallbackPageTexts,
   createEmbeddings,
   defaultEmbeddings,
+  detectPdfImageBlocks,
+  elementsToPageTexts,
+  emit,
+  isImageSemanticEnabled,
+  isPageNumberLine,
   lexicalIndex,
+  loadPdf,
+  markLocalTables,
+  needOcrPage,
+  newTaskId,
+  normalizeHeadings,
+  normalizeParsedText,
   parseDocument,
+  parsePdfWithUnstructured,
   ragService,
+  reflowBrokenLines,
+  semanticizePdfFigures,
   splitTextToChunks,
+  taskBus,
   tokenizeForIndex,
-  tokenizeQuery
+  tokenizeQuery,
+  withTaskEvents
 };
