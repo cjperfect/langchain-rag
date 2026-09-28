@@ -18,7 +18,7 @@ const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "qwen3.5:0.8b";
 /**
  * 按模型名创建对话模型：
  *   - LLM_PROVIDER=ollama → ChatOllama（原生 /api/chat，think:false，本地跑 qwen3.5）
- *   - 否则 → ChatOpenAI（OpenAI 兼容接口，如 DeepSeek）
+ *   - 否则 → ChatOpenAI（OpenAI 兼容接口，如 DeepSeek / 火山方舟）
  */
 export function createModel(modelName?: string): BaseChatModel {
   if (process.env.LLM_PROVIDER === "ollama") {
