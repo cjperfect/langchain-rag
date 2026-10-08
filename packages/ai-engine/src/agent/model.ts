@@ -35,7 +35,7 @@ export function createModel(modelName?: string): BaseChatModel {
   }
   return new ChatOpenAI({
     ...baseConfig,
-    model: modelName || DEFAULT_MODEL,
+    model: modelName || process.env.LLM_MODEL || DEFAULT_MODEL,
   });
 }
 

@@ -294,16 +294,29 @@ function fuseRrf(lists: RagSearchResult[][], k: number): RagSearchResult[] {
 /** 切片选项 */
 export interface SplitOptions {
   /**
-   * 表格豁免：解析产物里 `[表格]` 标记的 GFM 表格块整体保留为 1 片。
+   * 表格豁免：GFM 表格块整体保留为 1 片，不被字符级切分器切断。
    *
-   * 表格被字符级切分器切断后，行列结构（表头 + 分隔行 + 数据行）会被打散，
-   * 检索时命中碎片、展示时渲染不成表格；整体保留则表格语义完整。
-   * 表格块之间的普通正文仍按 350/40 正常切分。
+   * 识别两种表格来源：
+   * 1. PDF 路径：Unstructured / 本地回退清洗产出的表格带独立行 `[表格]` 前缀；
+   * 2. Markdown 路径：.md 里本来就是裸 GFM 表格（`| 表头 |` + `| --- |` 分隔行），无标记。
+   *
+   * 表格被切断后行列结构（表头+分隔行+数据行）打散，检索命中碎片、前端渲染不出表格；
+   * 整体保留则语义完整。表格块之间的普通正文仍按 350/40 正常切分。
    */
   preserveTables?: boolean;
 }
 
-/** 提取 `[表格]` 标记的 GFM 表格块，与其余普通文本分开 */
+/**
+ * 提取 GFM 表格块，与其余普通文本分开。
+ *
+ * 两种入口都要认：
+ * 1. PDF 路径：Unstructured / 本地回退清洗会把表格转成 GFM 并在前面加独立行 `[表格]`；
+ * 2. Markdown 路径：.md 文件里本来就是裸 GFM 表格，没有 `[表格]` 标记 ——
+ *    只认标记行的话 md 表格会被 RecursiveCharacterTextSplitter 从中间切断。
+ *
+ * 假阳性保护：连续 `|` 行收集到的候选块，只有至少含一行 GFM 分隔行时才确认为表格；
+ * 否则（正文偶然一行带竖线）退回普通文本。
+ */
 function extractTableBlocks(text: string): { tableBlocks: string[]; textBlocks: string[] } {
   const lines = text.split("\n");
   const tableBlocks: string[] = [];
@@ -325,26 +338,54 @@ function extractTableBlocks(text: string): { tableBlocks: string[]; textBlocks: 
     }
   };
 
+  // 行首是 |（允许前导空白）—— GFM 表格行的外观特征
+  const isTableLine = (line: string) => /^\s*\|/.test(line);
+  // GFM 分隔行：| --- | :---: | ---: | —— 去掉 |/空白/冒号/横杠/点后应为空
+  const isTableSeparator = (line: string) =>
+    isTableLine(line) && /-/.test(line) && line.trim().replace(/[|\s:.-]/g, "").length === 0;
+  // 候选块是否真表格：至少 2 行且含分隔行
+  const isRealTable = (block: string[]) => block.length >= 2 && block.some((l) => isTableSeparator(l));
+
+  // 表格结束时校验真假：真表格入 tableBlocks，假表格退回文本流
+  const closeTable = () => {
+    if (isRealTable(table)) {
+      flushTable();
+    } else {
+      current.push(...table);
+      table = [];
+    }
+    inTable = false;
+  };
+
   for (const line of lines) {
     if (inTable) {
-      // 表格块内：只有连续的 `|` 行属于表格；遇到普通行说明表格结束
-      if (/^\|/.test(line)) {
+      // 表格块内：连续的 `|` 行归表格；遇到普通行说明表格结束
+      if (isTableLine(line)) {
         table.push(line);
         continue;
       }
-      flushTable();
-      inTable = false;
+      closeTable();
     }
+
     if (/^\[表格\]\s*$/.test(line.trim())) {
-      // 新的表格块开始（保留 [表格] 标记，便于检索时识别）
+      // PDF 路径的显式标记行（保留它，便于检索时识别）
       flushText();
       inTable = true;
       table = [line];
       continue;
     }
+
+    if (isTableLine(line)) {
+      // 裸 GFM 表格的第一行（.md 常见）—— 开始收集候选块
+      flushText();
+      inTable = true;
+      table = [line];
+      continue;
+    }
+
     current.push(line);
   }
-  if (inTable) flushTable();
+  if (inTable) closeTable();
   flushText();
   return { tableBlocks, textBlocks };
 }

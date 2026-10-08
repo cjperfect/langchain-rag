@@ -1,0 +1,122 @@
+[
+  {
+    "id": "q001",
+    "query": "N6 mini 的电池容量是多少？",
+    "expect_doc": "测试PDF",
+    "expect_keywords": ["1800 mAh"],
+    "type": "table",
+    "note": "答案在参数表"
+  },
+  {
+    "id": "q002",
+    "query": "N6 mini 的输入电压是多少？",
+    "expect_doc": "测试PDF",
+    "expect_keywords": ["5V"],
+    "type": "table"
+  },
+  {
+    "id": "q003",
+    "query": "N6 mini 充满电需要多长时间？",
+    "expect_doc": "测试PDF",
+    "expect_keywords": ["2.5 小时"],
+    "type": "table"
+  },
+  {
+    "id": "q004",
+    "query": "N6 mini 设备净重多少？",
+    "expect_doc": "测试PDF",
+    "expect_keywords": ["210 g"],
+    "type": "table"
+  },
+  {
+    "id": "q005",
+    "query": "N6 mini 满电能按摩几次？",
+    "expect_doc": "测试PDF",
+    "expect_keywords": ["约 8 次"],
+    "type": "table"
+  },
+  {
+    "id": "q006",
+    "query": "N6 mini 有几档脉冲强度？",
+    "expect_doc": "测试PDF",
+    "expect_keywords": ["6 档"],
+    "type": "text"
+  },
+  {
+    "id": "q007",
+    "query": "N6 mini 单次使用建议不要超过多久？",
+    "expect_doc": "测试PDF",
+    "expect_keywords": ["15 分钟"],
+    "type": "text"
+  },
+  {
+    "id": "q008",
+    "query": "N6 mini 哪些人群不适合使用？",
+    "expect_doc": "测试PDF",
+    "expect_keywords": ["心脏起搏器"],
+    "type": "text"
+  },
+  {
+    "id": "q009",
+    "query": "N6 mini 长期不用时应该怎么保养电池？",
+    "expect_doc": "测试PDF",
+    "expect_keywords": ["每三个月充电"],
+    "type": "text"
+  },
+  {
+    "id": "q010",
+    "query": "N6 mini 使用设备的第一步要做什么？",
+    "expect_doc": "测试PDF",
+    "expect_keywords": ["开机"],
+    "type": "flowchart"
+  },
+  {
+    "id": "q011",
+    "query": "N6 mini 使用流程的最后一步是什么？",
+    "expect_doc": "测试PDF",
+    "expect_keywords": ["结束并充电"],
+    "type": "flowchart"
+  },
+  {
+    "id": "q012",
+    "query": "N6 mini 选择按摩模式之后下一步做什么？",
+    "expect_doc": "测试PDF",
+    "expect_keywords": ["佩戴设备"],
+    "type": "flowchart"
+  },
+  {
+    "id": "q013",
+    "query": "N6 mini 充电的时候指示灯是什么颜色？",
+    "expect_doc": "测试PDF",
+    "expect_keywords": ["红色"],
+    "type": "text"
+  },
+  {
+    "id": "q014",
+    "query": "N6 mini 指示灯橙色闪烁代表什么意思？",
+    "expect_doc": "测试PDF",
+    "expect_keywords": ["故障"],
+    "type": "text"
+  },
+  {
+    "id": "q015",
+    "query": "N6 mini 充满电后指示灯是什么颜色？",
+    "expect_doc": "测试PDF",
+    "expect_keywords": ["绿色"],
+    "type": "text"
+  },
+  {
+    "id": "q016",
+    "query": "N6 mini 这个产品保修几年？",
+    "expect_doc": "测试PDF",
+    "type": "adversarial",
+    "note": "文档完全没提保修期限。top-k 里若召回了测试PDF的切片 = 系统硬凑答案 = 幻觉"
+  },
+  {
+    "id": "q017",
+    "query": "N6 mini 售后客服电话是多少？",
+    "expect_doc": "测试PDF",
+    "type": "adversarial",
+    "note": "文档只说'联系售后'没给电话。top-k 里若召回测试PDF = 硬凑"
+  }
+]
